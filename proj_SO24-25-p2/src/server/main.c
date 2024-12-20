@@ -234,6 +234,8 @@ static void* get_file(void* arguments) {
 
 static void dispatch_threads(DIR* dir) {
   pthread_t* threads = malloc(max_threads * sizeof(pthread_t));
+  //create the host thread
+  pthread_t* host_thread = malloc(sizeof(pthread_t));
 
   if (threads == NULL) {
     fprintf(stderr, "Failed to allocate memory for threads\n");
@@ -251,7 +253,13 @@ static void dispatch_threads(DIR* dir) {
       return;
     }
   }
-
+  //dispatching the host thread TODO IT IS NOT CORRECT
+  if(pthread_create(host_thread, NULL, get_file, (void*)&thread_data) != 0) {
+    fprintf(stderr, "Failed to create host thread\n");
+    pthread_mutex_destroy(&thread_data.directory_mutex);
+    free(threads);
+    return;
+  }
   // ler do FIFO de registo
 
   for (unsigned int i = 0; i < max_threads; i++) {
@@ -263,11 +271,35 @@ static void dispatch_threads(DIR* dir) {
     }
   }
 
+  if (pthread_join(*host_thread, NULL) != 0) {
+    fprintf(stderr, "Failed to join host thread\n");
+    pthread_mutex_destroy(&thread_data.directory_mutex);
+    free(threads);
+    return;
+  }
+  
+
   if (pthread_mutex_destroy(&thread_data.directory_mutex) != 0) {
     fprintf(stderr, "Failed to destroy directory_mutex\n");
   }
 
   free(threads);
+  free(host_thread);
+}
+
+int fifo_init(char* fifo_name) {
+
+  if (unlink(fifo_name) != 0) {
+    return -1;
+
+  }
+  if (mkfifo(fifo_name, 0666) == -1) {
+    return -1;
+  }
+
+  int fifo_fd = open(fifo_name, O_RDONLY);
+
+  return fifo_fd;
 }
 
 
@@ -278,12 +310,12 @@ int main(int argc, char** argv) {
     write_str(STDERR_FILENO, " <jobs_dir>");
 		write_str(STDERR_FILENO, " <max_threads>");
 		write_str(STDERR_FILENO, " <max_backups> \n");
-    
+    write_str(STDERR_FILENO, "  <register_FIFO_name>\n");
     return 1;
   }
 
   jobs_directory = argv[1];
-
+  char* fifo_name = argv[4];
   char* endptr;
   max_backups = strtoul(argv[3], &endptr, 10);
 
@@ -308,6 +340,11 @@ int main(int argc, char** argv) {
 		write_str(STDERR_FILENO, "Invalid number of threads\n");
 		return 0;
 	}
+
+  if(fifo_init(fifo_name) == -1) {
+    write_str(STDERR_FILENO, "Failed to initialize FIFO\n");
+    return 1;
+  }
 
   if (kvs_init()) {
     write_str(STDERR_FILENO, "Failed to initialize KVS\n");
