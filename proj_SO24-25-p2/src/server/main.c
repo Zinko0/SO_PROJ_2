@@ -24,6 +24,13 @@ struct SharedData {
   pthread_mutex_t directory_mutex;
 };
 
+struct client_pipes {
+  char* req_pipe_path;
+  char* resp_pipe_path;
+  char* notif_pipe_path;
+};
+
+
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t n_current_backups_lock = PTHREAD_MUTEX_INITIALIZER;
 sem_t clients_sem;
@@ -240,18 +247,22 @@ static void* get_file(void* arguments) {
 static void *managing_clients(void* arguments) {
   int *fifo_fd = (int *) arguments;
   char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3 + 1]; // OP_CODE: nao sei se preciso de fazer code[1]
+  char req_pipe_path[MAX_PIPE_PATH_LENGTH];
+  char resp_pipe_path[MAX_PIPE_PATH_LENGTH];
   //Is allways reading from the FIFO waiting for a client to connect
   while (1){
-    if(read_all(*fifo_fd, buffer,strlen(buffer), NULL) == 0){
+    if(read_all(*fifo_fd, buffer,strlen(buffer), NULL) == 1){
       if(buffer[0] == OP_CODE_CONNECT){
         sem_wait(&clients_sem);
         //TODO: fazer os pipes para comunicar com o cliente
         //colocar corretamente os nomes dos pipes
+        strcopy(req_pipe_path, buffer + 2);
         create_pipe(buffer + 2, O_WRONLY);
         create_pipe(buffer + 2 + MAX_PIPE_PATH_LENGTH, O_RDONLY);
         create_pipe(buffer + 2 + MAX_PIPE_PATH_LENGTH * 2, O_RDONLY);
 
         //TODO: Criar um thread para o cliente
+        pthread_create(NULL, NULL, client_thread,);
       }
     }
   }
@@ -264,6 +275,7 @@ static void dispatch_threads(DIR* dir,int fifo_fd) {
   //create the host thread
   pthread_t* host_thread = malloc(sizeof(pthread_t));
 
+  pthread_t* client_threads = malloc(MAX_CLIENTS * sizeof(pthread_t));
   if (threads == NULL) {
     fprintf(stderr, "Failed to allocate memory for threads\n");
     return;
@@ -276,7 +288,9 @@ static void dispatch_threads(DIR* dir,int fifo_fd) {
     if (pthread_create(&threads[i], NULL, get_file, (void*)&thread_data) != 0) {
       fprintf(stderr, "Failed to create thread %zu\n", i);
       pthread_mutex_destroy(&thread_data.directory_mutex);
-      free(threads);
+        free(threads);
+        free(host_thread);
+        free(client_threads);
       return;
     }
   }
@@ -284,8 +298,21 @@ static void dispatch_threads(DIR* dir,int fifo_fd) {
   if(pthread_create(host_thread, NULL, managing_clients, (void*)&fifo_fd) != 0) {
     fprintf(stderr, "Failed to create host thread\n");
     pthread_mutex_destroy(&thread_data.directory_mutex);
-    free(threads);
+      free(threads);
+        free(host_thread);
+        free(client_threads);
     return;
+  }
+
+  for(size_t i = 0; i < MAX_CLIENTS; i++) {
+    if(pthread_create(&client_threads[i], NULL, , (void*)&fifo_fd) != 0) {
+      fprintf(stderr, "Failed to create client thread\n");
+      pthread_mutex_destroy(&thread_data.directory_mutex);
+        free(threads);
+        free(host_thread);
+        free(client_threads);
+      return;
+    }
   }
   // ler do FIFO de registo
 
@@ -293,7 +320,9 @@ static void dispatch_threads(DIR* dir,int fifo_fd) {
     if (pthread_join(threads[i], NULL) != 0) {
       fprintf(stderr, "Failed to join thread %u\n", i);
       pthread_mutex_destroy(&thread_data.directory_mutex);
-      free(threads);
+        free(threads);
+        free(host_thread);
+        free(client_threads);
       return;
     }
   }
@@ -301,7 +330,9 @@ static void dispatch_threads(DIR* dir,int fifo_fd) {
   if (pthread_join(*host_thread, NULL) != 0) {
     fprintf(stderr, "Failed to join host thread\n");
     pthread_mutex_destroy(&thread_data.directory_mutex);
-    free(threads);
+      free(threads);
+        free(host_thread);
+        free(client_threads);
     return;
   }
   
@@ -312,6 +343,7 @@ static void dispatch_threads(DIR* dir,int fifo_fd) {
 
   free(threads);
   free(host_thread);
+  free(client_threads);
 }
 
 int fifo_init(char* fifo_name) {

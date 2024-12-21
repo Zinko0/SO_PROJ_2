@@ -5,9 +5,12 @@
 #include <stddef.h>
 #include <pthread.h>
 
+#include "constants.h"
+
 typedef struct KeyNode {
     char *key;
     char *value;
+    int subscribers_fds[MAX_CLIENTS];
     struct KeyNode *next;
 } KeyNode;
 
