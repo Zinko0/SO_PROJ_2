@@ -35,6 +35,8 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  //criar thread para notificações
+
   while (1) {
     switch (get_next(STDIN_FILENO)) {
       case CMD_DISCONNECT:
