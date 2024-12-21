@@ -249,17 +249,20 @@ static void *managing_clients(void* arguments) {
   char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3 + 1]; // OP_CODE: nao sei se preciso de fazer code[1]
   char req_pipe_path[MAX_PIPE_PATH_LENGTH];
   char resp_pipe_path[MAX_PIPE_PATH_LENGTH];
+  char notif_pipe_path[MAX_PIPE_PATH_LENGTH];
   //Is allways reading from the FIFO waiting for a client to connect
   while (1){
     if(read_all(*fifo_fd, buffer,strlen(buffer), NULL) == 1){
       if(buffer[0] == OP_CODE_CONNECT){
         sem_wait(&clients_sem);
-        //TODO: fazer os pipes para comunicar com o cliente
-        //colocar corretamente os nomes dos pipes
-        strcopy(req_pipe_path, buffer + 2);
-        create_pipe(buffer + 2, O_WRONLY);
-        create_pipe(buffer + 2 + MAX_PIPE_PATH_LENGTH, O_RDONLY);
-        create_pipe(buffer + 2 + MAX_PIPE_PATH_LENGTH * 2, O_RDONLY);
+
+        strcpy(req_pipe_path,strtok(buffer + 2, " "));
+        strcpy(resp_pipe_path,strtok(NULL, " "));
+        strcpy(notif_pipe_path,strtok(NULL, " "));
+
+        create_pipe(req_pipe_path, O_RDONLY);
+        create_pipe(resp_pipe_path, O_WRONLY);
+        create_pipe(notif_pipe_path, O_WRONLY);
 
         //TODO: Criar um thread para o cliente
         pthread_create(NULL, NULL, client_thread,);
