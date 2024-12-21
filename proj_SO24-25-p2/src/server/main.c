@@ -7,12 +7,16 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <stdio.h>
+#include <semaphore.h>
 
 #include "constants.h"
 #include "parser.h"
 #include "operations.h"
 #include "io.h"
 #include "pthread.h"
+#include "src/common/protocol.h"
+#include "src/common/io.h"
+#include "src/common/constants.h"
 
 struct SharedData {
   DIR* dir;
@@ -22,10 +26,12 @@ struct SharedData {
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t n_current_backups_lock = PTHREAD_MUTEX_INITIALIZER;
+sem_t clients_sem;
 
 size_t active_backups = 0;     // Number of active backups
 size_t max_backups;            // Maximum allowed simultaneous backups
 size_t max_threads;            // Maximum allowed simultaneous threads
+
 char* jobs_directory = NULL;
 
 int filter_job_files(const struct dirent* entry) {
@@ -231,8 +237,29 @@ static void* get_file(void* arguments) {
   pthread_exit(NULL);
 }
 
+static void *managing_clients(void* arguments) {
+  int *fifo_fd = (int *) arguments;
+  char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3 + 1]; // OP_CODE: nao sei se preciso de fazer code[1]
+  //Is allways reading from the FIFO waiting for a client to connect
+  while (1){
+    if(read_all(*fifo_fd, buffer,strlen(buffer), NULL) == 0){
+      if(buffer[0] == OP_CODE_CONNECT){
+        sem_wait(&clients_sem);
+        //TODO: fazer os pipes para comunicar com o cliente
+        //colocar corretamente os nomes dos pipes
+        create_pipe(buffer + 2, O_WRONLY);
+        create_pipe(buffer + 2 + MAX_PIPE_PATH_LENGTH, O_RDONLY);
+        create_pipe(buffer + 2 + MAX_PIPE_PATH_LENGTH * 2, O_RDONLY);
 
-static void dispatch_threads(DIR* dir) {
+        //TODO: Criar um thread para o cliente
+      }
+    }
+  }
+  close(fifo_fd);
+  pthread_exit(NULL);
+}
+
+static void dispatch_threads(DIR* dir,int fifo_fd) {
   pthread_t* threads = malloc(max_threads * sizeof(pthread_t));
   //create the host thread
   pthread_t* host_thread = malloc(sizeof(pthread_t));
@@ -243,7 +270,7 @@ static void dispatch_threads(DIR* dir) {
   }
 
   struct SharedData thread_data = {dir, jobs_directory, PTHREAD_MUTEX_INITIALIZER};
-
+  
 
   for (size_t i = 0; i < max_threads; i++) {
     if (pthread_create(&threads[i], NULL, get_file, (void*)&thread_data) != 0) {
@@ -254,7 +281,7 @@ static void dispatch_threads(DIR* dir) {
     }
   }
   //dispatching the host thread TODO IT IS NOT CORRECT
-  if(pthread_create(host_thread, NULL, get_file, (void*)&thread_data) != 0) {
+  if(pthread_create(host_thread, NULL, managing_clients, (void*)&fifo_fd) != 0) {
     fprintf(stderr, "Failed to create host thread\n");
     pthread_mutex_destroy(&thread_data.directory_mutex);
     free(threads);
@@ -316,6 +343,7 @@ int main(int argc, char** argv) {
 
   jobs_directory = argv[1];
   char* fifo_name = argv[4];
+  int fifo_fd; // File descriptor for the FIFO
   char* endptr;
   max_backups = strtoul(argv[3], &endptr, 10);
 
@@ -341,10 +369,12 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 
-  if(fifo_init(fifo_name) == -1) {
+  if((fifo_fd = fifo_init(fifo_name)) == -1) {
     write_str(STDERR_FILENO, "Failed to initialize FIFO\n");
     return 1;
   }
+  //initialize the semaphore
+  sem_init(&clients_sem, 0, MAX_CLIENTS);
 
   if (kvs_init()) {
     write_str(STDERR_FILENO, "Failed to initialize KVS\n");
@@ -356,8 +386,8 @@ int main(int argc, char** argv) {
     fprintf(stderr, "Failed to open directory: %s\n", argv[1]);
     return 0;
   }
-
-  dispatch_threads(dir);
+  //WARNING: NAO SEI SE PRECISO DE PASSAR MAIS DO QUE O NOME DO FIFO
+  dispatch_threads(dir, fifo_fd);
 
   if (closedir(dir) == -1) {
     fprintf(stderr, "Failed to close directory\n");

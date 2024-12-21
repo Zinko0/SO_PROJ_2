@@ -24,4 +24,6 @@ int write_all(int fd, const void *buffer, size_t size);
 
 void delay(unsigned int time_ms);
 
+int create_pipe(char const* pipe_path,int mode);
+
 #endif  // COMMON_IO_H

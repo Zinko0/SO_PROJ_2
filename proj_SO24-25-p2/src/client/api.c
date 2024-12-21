@@ -31,6 +31,8 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
     return 1;
   }
   //Aguardar resposta do servidor
+
+  printf("Server returned %d for operation: connect\n",OP_CODE_CONNECT);
   return 0;
 }
  
@@ -38,7 +40,7 @@ int kvs_disconnect(void) {
   // close pipes and unlink pipe files
   //-------------------------------------------
   char buffer = '2'; //OP_CODE_DISCONNECT
-  if(write_all(filedesc[0],buffer, strlen(OP_CODE_DISCONNECT)) == -1){
+  if(write_all(filedesc[1],buffer, strlen(OP_CODE_DISCONNECT)) == -1){
     return 1;
   }
   //-------------------------------------------
@@ -48,13 +50,14 @@ int kvs_disconnect(void) {
     }
   }
   //Aguardar resposta do servidor
+  printf("Server returned %d for operation: disconnect\n",OP_CODE_DISCONNECT);
   return 0;
 }
 
 int kvs_subscribe(const char* key) {
   // send subscribe message to request pipe and wait for response in response pipe
   char buffer[1 + MAX_STRING_SIZE + 1 + 1]; //OP_CODE_SUBSCRIBE  
-  sprintf(buffer, "%d %s", OP_CODE_SUBSCRIBE ,key);
+  sprintf(buffer, "%d %s", OP_CODE_SUBSCRIBE ,key); //DUVIDA: SE faz com que as strings tenham sempre 40 caracteres
   if(write_all(filedesc[1],buffer, strlen(OP_CODE_SUBSCRIBE)) == -1){
     return 1;
   }
@@ -62,6 +65,7 @@ int kvs_subscribe(const char* key) {
   if(read_all(filedesc[2],buffer,1,NULL) == -1){
     return 1;
   }
+  printf("Server returned %d for operation: subscribe\n",OP_CODE_SUBSCRIBE);
   return 0;
 }
 
@@ -76,20 +80,9 @@ int kvs_unsubscribe(const char* key) {
   if(read_all(filedesc[2],buffer,1,NULL) == -1){
     return 1;
   }
+  printf("Server returned %d for operation: unsubscribe\n",OP_CODE_UNSUBSCRIBE);
   return 0;
 }
 
-int create_pipe(char const* pipe_path,int mode) {
-  //unlink pipe
-  if(unlink(pipe_path) != 0){
-    return -1;
-  }
-  //create pipe
-  if(mkfifo(pipe_path, 0640) != 0){
-    return -1;
-  }
-  int fd = open(pipe_path, mode);
-  return fd;
-}
 
 
