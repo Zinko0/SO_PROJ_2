@@ -63,8 +63,8 @@ int kvs_disconnect(void) {
     }
   }
   //DUVIDA: decidir o que fazer em caso de erro
-  printf("Server returned %d for operation: disconnect\n",OP_CODE_DISCONNECT);
-  return result;
+  printf("Server returned %d for operation: disconnect\n",result);
+  return 0;
 }
 
 int kvs_subscribe(const char* key) {
@@ -78,9 +78,10 @@ int kvs_subscribe(const char* key) {
   if(read_all(filedesc[2],buffer,3,NULL) == -1){
     return 1;
   }
-  printf("Server returned %d for operation: subscribe\n",OP_CODE_SUBSCRIBE);
   int result = buffer[2] - '0';
-  return result;
+  printf("Server returned %d for operation: subscribe\n",result);
+  
+  return 0;
 }
 
 int kvs_unsubscribe(const char* key) {
@@ -94,9 +95,9 @@ int kvs_unsubscribe(const char* key) {
   if(read_all(filedesc[2],buffer,3,NULL) == -1){
     return 1;
   }
-  printf("Server returned %d for operation: unsubscribe\n",OP_CODE_UNSUBSCRIBE);
   int result = buffer[2] - '0';
-  return result;
+  printf("Server returned %d for operation: unsubscribe\n",result);
+  return 0;
 }
 
 

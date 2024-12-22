@@ -96,6 +96,7 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
 
   int aux = 0;
   for (size_t i = 0; i < num_pairs; i++) {
+    if (delete_pair(kvs_table, keys[i]) != 0) {
       if (!aux) {
         write_str(fd, "[");
         aux = 1;
@@ -103,6 +104,7 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
       char str[MAX_STRING_SIZE];
       snprintf(str, MAX_STRING_SIZE, "(%s,KVSMISSING)", keys[i]);
       write_str(fd, str);
+    }
   }
   if (aux) {
     write_str(fd, "]\n");
@@ -177,4 +179,61 @@ int kvs_backup(size_t num_backup,char* job_filename , char* directory) {
 void kvs_wait(unsigned int delay_ms) {
   struct timespec delay = delay_to_timespec(delay_ms);
   nanosleep(&delay, NULL);
+}
+
+int subscribe(char *key, int fd) {
+  if (kvs_table == NULL) {
+    fprintf(stderr, "KVS state must be initialized\n");
+    return 1;
+  }
+  
+  pthread_rwlock_wrlock(&kvs_table->tablelock);
+
+  if (write_subscription(kvs_table, key, fd) != 0) {
+    //saber o que fazer em caso de erro
+    return 0;
+  }
+  
+    pthread_rwlock_unlock(&kvs_table->tablelock);
+  return 1;
+}
+
+int unsubscribe(char *key, int fd) {
+  if (kvs_table == NULL) {
+    fprintf(stderr, "KVS state must be initialized\n");
+    return 1;
+  }
+  
+  pthread_rwlock_wrlock(&kvs_table->tablelock);
+
+  if (delete_subscription(kvs_table, key, fd) != 0) {
+    //saber o que fazer em caso de erro
+    return 1;
+  }
+  
+  pthread_rwlock_unlock(&kvs_table->tablelock);
+  return 0;
+}
+
+int disconnect(int fd) {
+  //percorrer a lista de keys e dar delete_subscription
+  KeyNode *keyNode;
+  //temos de dar loc à tabela toda (podemos depois usar a tática do show que vai libertar os locks a cada iteração)
+  pthread_rwlock_wrlock(&kvs_table->tablelock);
+
+  for(int i = 0; i < TABLE_SIZE; i++){
+    keyNode = kvs_table->table[i];
+    while(keyNode != NULL){
+      for(int j = 0; j < MAX_CLIENTS; j++){
+        if(keyNode->subscribers_fds[j] == fd){
+          keyNode->subscribers_fds[j] = 0;
+        }
+      }
+      keyNode = keyNode->next;
+    }
+  }
+
+  pthread_rwlock_unlock(&kvs_table->tablelock);
+  
+  return 0;
 }

@@ -6,6 +6,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <semaphore.h>
 #include <sys/types.h>
@@ -284,6 +285,11 @@ static void *client_thread(void *arguments){
   int resp_pipe_fd;
   int notif_pipe_fd;
 
+  char op_buffer[1 + 1 + 41]; //OP_CODE + space + key
+  char resp_buffer[1 + 1 + 1]; //OP_CODE + space + result
+  int result;
+  int disconnect_flag = 0;
+  while(1){
   //readMsg function ---------------------------
   sem_wait(&empty_buffer);
 
@@ -306,24 +312,42 @@ static void *client_thread(void *arguments){
   resp_pipe_fd = create_pipe(resp_pipe_path, O_WRONLY);
   notif_pipe_fd = create_pipe(notif_pipe_path, O_WRONLY);
   
-  char op_buffer[1 + 1 + 41]; //OP_CODE + space + key
-  while(read_all(req_pipe_fd, op_buffer, strlen(op_buffer), NULL) == 1){
-    switch (op_buffer[0]){
-      case OP_CODE_SUBSCRIBE:
-        //subscribe function
-        break;
-      case OP_CODE_UNSUBSCRIBE:
-        //unsubscribe function
-        break;
-      case OP_CODE_DISCONNECT:
-        close(req_pipe_fd);
-        close(resp_pipe_fd);
-        close(notif_pipe_fd);
-        //disconnect function
-        //go back to the main loop
-        break;
+    //while the client is connected
+    while(!disconnect_flag){
+      //read from the request pipe until we get a valid operation
+      while(read_all(req_pipe_fd, op_buffer, strlen(op_buffer), NULL) != 1);
+
+      switch (op_buffer[0]){
+        case OP_CODE_SUBSCRIBE:
+
+          result = subscribe(op_buffer + 2, notif_pipe_fd);
+          snprintf(resp_buffer, strlen(resp_buffer), "%d %d", OP_CODE_SUBSCRIBE ,result);
+          write(resp_pipe_fd, resp_buffer, sizeof(char) * strlen(resp_buffer));
+          break;
+
+        case OP_CODE_UNSUBSCRIBE:
+
+          result = unsubscribe(op_buffer + 2, notif_pipe_fd);
+          snprintf(resp_buffer, strlen(resp_buffer), "%d %d", OP_CODE_UNSUBSCRIBE ,result);
+          write(resp_pipe_fd, resp_buffer, sizeof(char) * strlen(resp_buffer));
+          break;
+
+        case OP_CODE_DISCONNECT:
+          
+          result = disconnect(notif_pipe_fd);
+          snprintf(resp_buffer, strlen(resp_buffer), "%d %d", OP_CODE_DISCONNECT ,result);
+          write(resp_pipe_fd, resp_buffer, sizeof(char) * strlen(resp_buffer));        
+          close(req_pipe_fd);
+          close(resp_pipe_fd);
+          close(notif_pipe_fd);
+
+          //go back to the main loop
+          disconnect_flag = 1;
+          break;
+      }
     }
   }
+  pthread_exit(NULL);
 }
 
 static void dispatch_threads(DIR* dir,struct ManagingClients* buffer_data) {
@@ -338,7 +362,7 @@ static void dispatch_threads(DIR* dir,struct ManagingClients* buffer_data) {
   }
 
   struct SharedData thread_data = {dir, jobs_directory, PTHREAD_MUTEX_INITIALIZER};
-  struct ManagingClients client_data = {buffer_data->buffer, 0, buffer_data->fifo_fd};
+
 
   for (size_t i = 0; i < max_threads; i++) {
     if (pthread_create(&threads[i], NULL, get_file, (void*)&thread_data) != 0) {
@@ -351,7 +375,7 @@ static void dispatch_threads(DIR* dir,struct ManagingClients* buffer_data) {
     }
   }
   //dispatching the host thread TODO IT IS NOT CORRECT
-  if(pthread_create(host_thread, NULL, managing_clients, (void*)&client_data) != 0) {
+  if(pthread_create(host_thread, NULL, managing_clients, (void*)buffer_data) != 0) {
     fprintf(stderr, "Failed to create host thread\n");
     pthread_mutex_destroy(&thread_data.directory_mutex);
       free(threads);
@@ -361,7 +385,7 @@ static void dispatch_threads(DIR* dir,struct ManagingClients* buffer_data) {
   }
 
   for(size_t i = 0; i < MAX_CLIENTS; i++) {
-    if(pthread_create(&client_threads[i], NULL, client_thread , (void*)&client_data) != 0) {
+    if(pthread_create(&client_threads[i], NULL, client_thread , (void*)buffer_data) != 0) {
       fprintf(stderr, "Failed to create client thread\n");
       pthread_mutex_destroy(&thread_data.directory_mutex);
         free(threads);
@@ -431,7 +455,10 @@ int main(int argc, char** argv) {
 
   jobs_directory = argv[1];
   char* fifo_name = argv[4];
-  struct ManagingClients *buffer_data; //struct to create the write/reading buffer
+
+  struct ManagingClients buffer_data; //struct to create the write/reading buffer
+  *(buffer_data.writeindex) = 0; //initialize the writeindex
+
   char* endptr;
   max_backups = strtoul(argv[3], &endptr, 10);
 
@@ -457,7 +484,7 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 
-  if((buffer_data->fifo_fd = fifo_init(fifo_name)) == -1) {
+  if((buffer_data.fifo_fd = fifo_init(fifo_name)) == -1) {
     write_str(STDERR_FILENO, "Failed to initialize FIFO\n");
     return 1;
   }
@@ -476,7 +503,7 @@ int main(int argc, char** argv) {
     return 0;
   }
   //WARNING: NAO SEI SE PRECISO DE PASSAR MAIS DO QUE O NOME DO FIFO
-  dispatch_threads(dir, buffer_data);
+  dispatch_threads(dir, &buffer_data);
 
   if (closedir(dir) == -1) {
     fprintf(stderr, "Failed to close directory\n");

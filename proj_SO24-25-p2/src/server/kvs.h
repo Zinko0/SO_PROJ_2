@@ -48,5 +48,19 @@ int delete_pair(HashTable *ht, const char *key);
 /// @param ht Hash table to be deleted.
 void free_table(HashTable *ht);
 
+/// @brief 
+/// @param ht 
+/// @param key 
+/// @param fd 
+/// @return 0 if the key was not found, 1 if the subscription was added successfully, -1 if there is no space for more subscribers 
+int write_subscription(HashTable *ht, const char *key, int fd);
+
+/// @brief 
+/// @param ht 
+/// @param key 
+/// @param fd 
+/// @return 1 if the key was not found, 0 if the subscription was deleted successfully 
+int delete_subscription(HashTable *ht, const char *key, int fd);
+
 
 #endif  // KVS_H

@@ -28,6 +28,29 @@ struct HashTable* create_hash_table() {
 	return ht;
 }
 
+int write_subscription(HashTable *ht, const char *key, int fd) {
+    int index = hash(key);
+
+    KeyNode *keyNode = ht->table[index];
+    KeyNode *previousNode;
+
+    while (keyNode != NULL) {
+        if (strcmp(keyNode->key, key) == 0) {
+            // Key found; add the subscriber
+            for (int i = 0; i < MAX_CLIENTS; i++) {
+                if (keyNode->subscribers_fds[i] == 0) {
+                    keyNode->subscribers_fds[i] = fd;
+                    return 0;
+                }
+            }
+            return -1; // No space for more subscribers SHOULD NOT HAPPEN
+        }
+        previousNode = keyNode;
+        keyNode = previousNode->next; // Move to the next node
+    }
+    return 1; // Key not found
+}
+
 int write_pair(HashTable *ht, const char *key, const char *value) {
     int index = hash(key);
 
@@ -71,6 +94,29 @@ char* read_pair(HashTable *ht, const char *key) {
     }
 
     return NULL; // Key not found
+}
+
+int delete_subscription(HashTable *ht, const char *key, int fd) {
+    int index = hash(key);
+
+    KeyNode *keyNode = ht->table[index];
+    KeyNode *previousNode;
+
+    while (keyNode != NULL) {
+        if (strcmp(keyNode->key, key) == 0) {
+            // Key found; delete the subscriber
+            for (int i = 0; i < MAX_CLIENTS; i++) {
+                if (keyNode->subscribers_fds[i] == fd) {
+                    keyNode->subscribers_fds[i] = 0;
+                    return 0;
+                }
+            }
+            return 1; // No subscriber to delete
+        }
+        previousNode = keyNode;
+        keyNode = previousNode->next; // Move to the next node
+    }
+    return 1; // Key not found
 }
 
 int delete_pair(HashTable *ht, const char *key) {
