@@ -101,11 +101,12 @@ int kvs_unsubscribe(const char* key) {
   return 0;
 }
 
-void *kvs_get_notification(void) {
+void *kvs_get_notification(void* arg) {
+  int* connected = (int*) arg;
   // read from notification pipe
-  char buffer[MAX_STRING_SIZE + 1];
+  char buffer[MAX_STRING_SIZE*2 + strlen("(,)" + 1)];
   while (connected){
-    while(read_all(filedesc[3],buffer,MAX_STRING_SIZE,NULL) != 1){
+    while(read_all(filedesc[3],buffer,sizeof(buffer)*sizeof(char),NULL) != 1){
       printf("%s\n",buffer);
     }
   }
