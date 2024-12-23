@@ -110,7 +110,6 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
     write_str(fd, "]\n");
   }
   //ver os subscribers
-  //percorrer a lista de fds dos subscribers e dar write(fds[i],str,strlen(str))
   pthread_rwlock_unlock(&kvs_table->tablelock);
   return 0;
 }

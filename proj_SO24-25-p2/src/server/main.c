@@ -30,7 +30,7 @@ struct SharedData {
 struct ManagingClients {
   //we need to store 3 pipe paths with 2 spaces between them and a \0 at the end
   char buffer[(MAX_PIPE_PATH_LENGTH * 3 + 2 + 1)* MAX_CLIENTS];
-  size_t *writeindex;
+  size_t *read_index;
   int fifo_fd;
 };
 
@@ -253,23 +253,25 @@ static void* get_file(void* arguments) {
 static void *managing_clients(void* arguments) {
   struct ManagingClients* buffer_data = (struct ManagingClients*) arguments;
   char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3 + 1]; // OP_CODE: nao sei se preciso de fazer code[1]
-
+  size_t write_index = 0;
   //Is allways reading from the FIFO waiting for a client to connect
   while (1){
-    if(read_all(buffer_data->fifo_fd, buffer,strlen(buffer), NULL) == 1){
+    if(read_all(buffer_data->fifo_fd, buffer,sizeof(buffer), NULL) == 1){
+      printf("Received message: %s\n",buffer);
       if(buffer[0] == OP_CODE_CONNECT){
         sem_wait(&full_buffer);
 
         pthread_mutex_lock(&semExMut);
 
-        strcpy(buffer_data->buffer + *(buffer_data->writeindex), buffer + 2); //PERIGO: nao sei se esta correto
-        *(buffer_data->writeindex) += strlen(buffer - 2) % strlen(buffer_data->buffer); //MUITO CUIDADO NAO SEI SE é -2
+        strcpy(buffer_data->buffer + write_index, buffer + 2); //PERIGO: nao sei se esta correto
+        write_index += strlen(buffer - 2) % strlen(buffer_data->buffer); //MUITO CUIDADO NAO SEI SE é -2
 
         pthread_mutex_unlock(&semExMut);
 
         sem_post(&empty_buffer);
 
       }
+      printf("escrita\n");
     }
   }
   close(buffer_data->fifo_fd);
@@ -287,7 +289,7 @@ static void *client_thread(void *arguments){
   int notif_pipe_fd;
 
   char op_buffer[1 + 1 + 41]; //OP_CODE + space + key
-  char resp_buffer[1 + 1 + 1]; //OP_CODE + space + result
+  char resp_buffer[4]; //OP_CODE + space + result + \0
   int result;
   int disconnect_flag = 0;
   while(1){
@@ -296,12 +298,12 @@ static void *client_thread(void *arguments){
 
   pthread_mutex_lock(&semExMut);
 
-  strcpy(buffer,buffer_data->buffer + *(buffer_data->writeindex));
-  *(buffer_data->writeindex) = *(buffer_data->writeindex) + strlen(buffer) % strlen(buffer_data->buffer);
+  strcpy(buffer,buffer_data->buffer + *(buffer_data->read_index));
+  *(buffer_data->read_index) = *(buffer_data->read_index) + strlen(buffer) % strlen(buffer_data->buffer);
         
   pthread_mutex_unlock(&semExMut);
 
-  sem_post(&empty_buffer);
+  sem_post(&full_buffer);
 
   //--------------------------------------------
 
@@ -317,28 +319,28 @@ static void *client_thread(void *arguments){
     //while the client is connected
     while(!disconnect_flag){
       //read from the request pipe until we get a valid operation
-      while(read_all(req_pipe_fd, op_buffer, strlen(op_buffer), NULL) != 1);
-
+      while(read_all(req_pipe_fd, op_buffer, sizeof(op_buffer), NULL) != 1);
+  
       switch (op_buffer[0]){
         case OP_CODE_SUBSCRIBE:
 
           result = subscribe(op_buffer + 2, notif_pipe_fd);
-          snprintf(resp_buffer, strlen(resp_buffer), "%d %d", OP_CODE_SUBSCRIBE ,result);
-          write(resp_pipe_fd, resp_buffer, sizeof(char) * strlen(resp_buffer));
+          snprintf(resp_buffer, sizeof(resp_buffer), "%d %d", OP_CODE_SUBSCRIBE ,result);
+          write(resp_pipe_fd, resp_buffer, sizeof(char) * sizeof(resp_buffer));
           break;
 
         case OP_CODE_UNSUBSCRIBE:
 
           result = unsubscribe(op_buffer + 2, notif_pipe_fd);
-          snprintf(resp_buffer, strlen(resp_buffer), "%d %d", OP_CODE_UNSUBSCRIBE ,result);
-          write(resp_pipe_fd, resp_buffer, sizeof(char) * strlen(resp_buffer));
+          snprintf(resp_buffer, sizeof(resp_buffer), "%d %d", OP_CODE_UNSUBSCRIBE ,result);
+          write(resp_pipe_fd, resp_buffer, sizeof(char) * sizeof(resp_buffer));
           break;
 
         case OP_CODE_DISCONNECT:
           
           result = disconnect(notif_pipe_fd);
-          snprintf(resp_buffer, strlen(resp_buffer), "%d %d", OP_CODE_DISCONNECT ,result);
-          write(resp_pipe_fd, resp_buffer, sizeof(char) * strlen(resp_buffer));        
+          snprintf(resp_buffer, sizeof(resp_buffer), "%d %d", OP_CODE_DISCONNECT ,result);
+          write(resp_pipe_fd, resp_buffer, sizeof(char) * sizeof(resp_buffer));        
           close(req_pipe_fd);
           close(resp_pipe_fd);
           close(notif_pipe_fd);
@@ -446,8 +448,8 @@ int requests_buffer_init(struct ManagingClients* buffer,char* fifo_name) {
   }
 
   buffer->fifo_fd = fifo_fd;
-  buffer->writeindex = malloc(sizeof(size_t)); //MALOC TEMOS DE DAR FREE
-  buffer->writeindex = 0;
+  buffer->read_index = malloc(sizeof(size_t)); //MALOC TEMOS DE DAR FREE
+  buffer->read_index = 0;
 
   return 0;
 }

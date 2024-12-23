@@ -16,9 +16,10 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   filedesc[0] = open(server_pipe_path,O_WRONLY);
   //------------------------------------------
   char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3 + 1];
-  snprintf(buffer, strlen(buffer), "%d %s %s %s", OP_CODE_CONNECT,req_pipe_path, resp_pipe_path, notif_pipe_path);
-
-  if(write_all(filedesc[0], buffer, strlen(buffer)) == -1){
+  snprintf(buffer, sizeof(buffer), "%d %s %s %s", OP_CODE_CONNECT,req_pipe_path, resp_pipe_path, notif_pipe_path);
+  printf("Message sent: %s",buffer);
+  
+  if(write_all(filedesc[0], buffer, sizeof(buffer)) == -1){
     return 1;
   }
  //------------------------------------------
@@ -78,7 +79,7 @@ int kvs_subscribe(const char* key) {
   // send subscribe message to request pipe and wait for response in response pipe
   char buffer[1 + MAX_STRING_SIZE + 1 + 1]; //OP_CODE_SUBSCRIBE  
   sprintf(buffer, "%d %s", OP_CODE_SUBSCRIBE ,key); //DUVIDA: SE faz com que as strings tenham sempre 40 caracteres
-  if(write_all(filedesc[1],buffer, strlen(buffer)) == -1){
+  if(write_all(filedesc[1],buffer, sizeof(buffer)) == -1){
     return 1;
   }
   
@@ -95,7 +96,7 @@ int kvs_unsubscribe(const char* key) {
   // send unsubscribe message to request pipe and wait for response in response pipe
   char buffer[1 + MAX_STRING_SIZE + 1 + 1]; //OP_CODE_SUBSCRIBE  
   sprintf(buffer, "%d %s", OP_CODE_UNSUBSCRIBE ,key);
-  if(write_all(filedesc[1],buffer, strlen(buffer)) == -1){
+  if(write_all(filedesc[1],buffer, sizeof(buffer)) == -1){
     return 1;
   }
   //response of type: "%c %c\n" -> OP_CODE_UNSUBSCRIBE, result
