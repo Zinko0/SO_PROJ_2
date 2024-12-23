@@ -5,6 +5,7 @@
 #include "src/common/constants.h"
 #include "src/common/protocol.h"
 #include "src/common/io.h"
+#include "api.h"
 
 int filedesc[4];
 
@@ -100,5 +101,13 @@ int kvs_unsubscribe(const char* key) {
   return 0;
 }
 
-
-
+void *kvs_get_notification(void) {
+  // read from notification pipe
+  char buffer[MAX_STRING_SIZE + 1];
+  while (connected){
+    while(read_all(filedesc[3],buffer,MAX_STRING_SIZE,NULL) != 1){
+      printf("%s\n",buffer);
+    }
+  }
+  return NULL;
+}

@@ -10,7 +10,6 @@
 #include "src/common/constants.h"
 #include "src/common/io.h"
 
-
 int main(int argc, char* argv[]) {
   if (argc < 3) {
     fprintf(stderr, "Usage: %s <client_unique_id> <register_pipe_path>\n", argv[0]);
@@ -35,7 +34,11 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  //criar thread para notificações
+  connected = 1;
+
+  pthread_t notif_thread;
+
+  pthread_create(&notif_thread, NULL, kvs_get_notification, NULL);
 
   while (1) {
     switch (get_next(STDIN_FILENO)) {
@@ -44,6 +47,7 @@ int main(int argc, char* argv[]) {
           fprintf(stderr, "Failed to disconnect to the server\n");
           return 1;
         }
+        pthread_join(notif_thread, NULL);
         // TODO: end notifications thread
         printf("Disconnected from server\n");
         return 0;
