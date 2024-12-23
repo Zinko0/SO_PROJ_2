@@ -261,7 +261,7 @@ static void *managing_clients(void* arguments) {
 
         pthread_mutex_lock(&semExMut);
 
-        strcpy(buffer_data->buffer[*(buffer_data->writeindex)], buffer[2]); //PERIGO: nao sei se esta correto
+        strcpy(buffer_data->buffer + *(buffer_data->writeindex), buffer + 2); //PERIGO: nao sei se esta correto
         *(buffer_data->writeindex) += strlen(buffer - 2) % strlen(buffer_data->buffer); //MUITO CUIDADO NAO SEI SE é -2
 
         pthread_mutex_unlock(&semExMut);
@@ -295,7 +295,7 @@ static void *client_thread(void *arguments){
 
   pthread_mutex_lock(&semExMut);
 
-  strcpy(buffer,buffer_data->buffer[*(buffer_data->writeindex)]);
+  strcpy(buffer,buffer_data->buffer + *(buffer_data->writeindex));
   *(buffer_data->writeindex) = *(buffer_data->writeindex) + strlen(buffer) % strlen(buffer_data->buffer);
         
   pthread_mutex_unlock(&semExMut);
@@ -426,19 +426,26 @@ static void dispatch_threads(DIR* dir,struct ManagingClients* buffer_data) {
   free(client_threads);
 }
 
-int fifo_init(char* fifo_name) {
+int requests_buffer_init(struct ManagingClients* buffer,char* fifo_name) {
+  int fifo_fd;
 
   if (unlink(fifo_name) != 0) {
-    return -1;
+    return 1;
 
   }
   if (mkfifo(fifo_name, 0666) == -1) {
-    return -1;
+    return 1;
   }
 
-  int fifo_fd = open(fifo_name, O_RDONLY);
+  if ((fifo_fd = open(fifo_name, O_RDONLY)) == -1) {
+    return 1;
+  }
 
-  return fifo_fd;
+  buffer->fifo_fd = fifo_fd;
+  buffer->writeindex = malloc(sizeof(size_t)); //MALOC TEMOS DE DAR FREE
+  buffer->writeindex = 0;
+
+  return 0;
 }
 
 
@@ -457,7 +464,7 @@ int main(int argc, char** argv) {
   char* fifo_name = argv[4];
 
   struct ManagingClients buffer_data; //struct to create the write/reading buffer
-  *(buffer_data.writeindex) = 0; //initialize the writeindex
+
 
   char* endptr;
   max_backups = strtoul(argv[3], &endptr, 10);
@@ -484,10 +491,11 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 
-  if((buffer_data.fifo_fd = fifo_init(fifo_name)) == -1) {
+  if((requests_buffer_init(&buffer_data,fifo_name)) != 0) {
     write_str(STDERR_FILENO, "Failed to initialize FIFO\n");
     return 1;
   }
+
   //initialize the semaphore
   sem_init(&full_buffer, 0, MAX_CLIENTS);
   sem_init(&empty_buffer, 0, 0);
