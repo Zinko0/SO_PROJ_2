@@ -2,6 +2,7 @@
 #include "string.h"
 #include <ctype.h>
 
+#include <unistd.h>
 #include <stdlib.h>
 
 // Hash function based on key initial.
@@ -63,6 +64,14 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
             // overwrite value
             free(keyNode->value);
             keyNode->value = strdup(value);
+            // Notify subscribers
+            for(int i = 0; i < MAX_CLIENTS; i++) {
+                if (keyNode->subscribers_fds[i] != 0) {
+                    char str[1 + MAX_STRING_SIZE + 1 + MAX_STRING_SIZE + 1];
+                    snprintf(str, strlen(str) * sizeof(char), "(%s,%s)", key, value);
+                    write(keyNode->subscribers_fds[i], str, strlen(str));
+                }
+            }
             return 0;
         }
         previousNode = keyNode;
@@ -128,6 +137,13 @@ int delete_pair(HashTable *ht, const char *key) {
 
     while (keyNode != NULL) {
         if (strcmp(keyNode->key, key) == 0) {
+            for(int i = 0; i < MAX_CLIENTS; i++) {
+                if (keyNode->subscribers_fds[i] != 0) {
+                    char str[1 + MAX_STRING_SIZE + 1 + 8];
+                    snprintf(str, strlen(str) * sizeof(char), "(%s,DELETED)", key);
+                    write(keyNode->subscribers_fds[i], str, strlen(str));
+                }
+            }
             // Key found; delete this node
             if (prevNode == NULL) {
                 // Node to delete is the first node in the list
