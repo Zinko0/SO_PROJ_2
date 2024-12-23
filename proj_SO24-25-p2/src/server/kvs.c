@@ -1,7 +1,7 @@
 #include "kvs.h"
 #include "string.h"
 #include <ctype.h>
-
+#include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 

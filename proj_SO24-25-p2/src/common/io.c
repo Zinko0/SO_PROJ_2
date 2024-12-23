@@ -81,17 +81,18 @@ void delay(unsigned int time_ms) {
     nanosleep(&delay, NULL);
 }
 
-int create_pipe(char const* pipe_path,int mode) {
+int create_pipe(char const* pipe_path) {
   //unlink pipe
-  if(unlink(pipe_path) != 0){
+  if(unlink(pipe_path) != 0 && errno != ENOENT){
     return -1;
   }
   //create pipe
   if(mkfifo(pipe_path, 0640) != 0){
+    unlink(pipe_path);
     return -1;
   }
-  int fd = open(pipe_path, mode);
-  return fd;
+  
+  return 0;
 }
 
 

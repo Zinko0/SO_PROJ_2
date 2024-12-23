@@ -1,4 +1,5 @@
 #include <unistd.h>
+#include <errno.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -308,9 +309,10 @@ static void *client_thread(void *arguments){
   strcpy(resp_pipe_path,strtok(NULL, " "));
   strcpy(notif_pipe_path,strtok(NULL, " "));
 
-  req_pipe_fd = create_pipe(req_pipe_path, O_RDONLY);
-  resp_pipe_fd = create_pipe(resp_pipe_path, O_WRONLY);
-  notif_pipe_fd = create_pipe(notif_pipe_path, O_WRONLY);
+  req_pipe_fd = open(req_pipe_path, O_RDONLY);
+  resp_pipe_fd = open(resp_pipe_path, O_WRONLY);
+  notif_pipe_fd = open(notif_pipe_path, O_WRONLY); //falta testar se os opens correram bem
+  
   
     //while the client is connected
     while(!disconnect_flag){
@@ -429,15 +431,17 @@ static void dispatch_threads(DIR* dir,struct ManagingClients* buffer_data) {
 int requests_buffer_init(struct ManagingClients* buffer,char* fifo_name) {
   int fifo_fd;
 
-  if (unlink(fifo_name) != 0) {
-    return 1;
-
-  }
-  if (mkfifo(fifo_name, 0666) == -1) {
+   if (unlink(fifo_name) != 0 && errno != ENOENT) {
     return 1;
   }
 
-  if ((fifo_fd = open(fifo_name, O_RDONLY)) == -1) {
+  if (mkfifo(fifo_name, 0640) == -1) {
+    unlink(fifo_name);
+    return 1;
+  }
+  printf("FIFO NAME: %s\n",fifo_name);
+  fifo_fd = open(fifo_name, O_RDONLY);
+  if (fifo_fd == -1) {
     return 1;
   }
 
@@ -461,11 +465,7 @@ int main(int argc, char** argv) {
   }
 
   jobs_directory = argv[1];
-  char* fifo_name = argv[4];
-
   struct ManagingClients buffer_data; //struct to create the write/reading buffer
-
-
   char* endptr;
   max_backups = strtoul(argv[3], &endptr, 10);
 
@@ -491,7 +491,7 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 
-  if((requests_buffer_init(&buffer_data,fifo_name)) != 0) {
+  if((requests_buffer_init(&buffer_data,argv[4])) != 0) {
     write_str(STDERR_FILENO, "Failed to initialize FIFO\n");
     return 1;
   }

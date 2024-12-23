@@ -11,10 +11,9 @@ int filedesc[4];
 
 int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char const* server_pipe_path,
                 char const* notif_pipe_path) {
-  if((filedesc[0] = create_pipe(server_pipe_path,O_WRONLY)) == -1){
-    return 1;
-  }
   
+  //abro o pipe (o server já deve estar aberto)
+  filedesc[0] = open(server_pipe_path,O_WRONLY);
   //------------------------------------------
   char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3 + 1];
   snprintf(buffer, strlen(buffer), "%d %s %s %s", OP_CODE_CONNECT,req_pipe_path, resp_pipe_path, notif_pipe_path);
@@ -24,15 +23,23 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   }
  //------------------------------------------
  
-  if((filedesc[1] = create_pipe(req_pipe_path,O_WRONLY)) == -1){
+  if(create_pipe(req_pipe_path) == -1){
     return 1;
   }
-  if((filedesc[2] = create_pipe(resp_pipe_path,O_RDONLY)) == -1){
+  if(create_pipe(resp_pipe_path) == -1){
     return 1;
   }
 
-  if((filedesc[3]= create_pipe(notif_pipe_path,O_RDONLY)) == -1){
+  if(create_pipe(notif_pipe_path) == -1){
     return 1;
+  }
+  filedesc[1] = open(req_pipe_path,O_WRONLY);
+  filedesc[2] = open(resp_pipe_path,O_RDONLY);
+  filedesc[3] = open(notif_pipe_path,O_RDONLY);
+  for(int i = 1; i < 4; i++){
+    if(filedesc[i] == -1){
+      return 1;
+    }
   }
   //Aguardar resposta do servidor
   if(read_all(filedesc[2],buffer,3,NULL) == -1){
@@ -44,7 +51,7 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
 }
  
 int kvs_disconnect(void) {
-  // close pipes and unlink pipe files
+  // close pipes 
   //-------------------------------------------
   char buffer[3]; //OP_CODE_DISCONNECT
   sprintf(buffer, "%d", OP_CODE_DISCONNECT);
@@ -63,7 +70,6 @@ int kvs_disconnect(void) {
       return 1;
     }
   }
-  //DUVIDA: decidir o que fazer em caso de erro
   printf("Server returned %d for operation: disconnect\n",result);
   return 0;
 }
