@@ -36,7 +36,7 @@ struct PipeData {
 struct ManagingClients {
   //the buffer can have whatever size. 
   struct PipeData buffer[MAX_CLIENTS];
-  size_t *read_index;
+  int *read_index;
   int fifo_fd;
 };
 
@@ -260,9 +260,10 @@ static void* get_file(void* arguments) {
 }
 
 void assing_pipe_data(struct PipeData* buffer,size_t index,char* pipes_path){
+  //printf("pipes path: %s\n",pipes_path);
   char* req_pipe_path = strtok(pipes_path," ");
   char* resp_pipe_path = strtok(NULL," ");
-  char* notif_pipe_path = strtok(NULL," ");
+  char* notif_pipe_path = strtok(NULL," "); //está com um char a mais por alguma razao
   strn_memcpy(buffer[index].req_pipe_path,req_pipe_path,MAX_PIPE_PATH_LENGTH);
   strn_memcpy(buffer[index].resp_pipe_path,resp_pipe_path,MAX_PIPE_PATH_LENGTH);
   strn_memcpy(buffer[index].notif_pipe_path,notif_pipe_path,MAX_PIPE_PATH_LENGTH);
@@ -271,7 +272,7 @@ void assing_pipe_data(struct PipeData* buffer,size_t index,char* pipes_path){
 
 static void *managing_clients(void* arguments) {
   struct ManagingClients* buffer_data = (struct ManagingClients*) arguments;
-  char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3 + 1]; //OP_CODE + 3 pipe paths + 3 spaces + \0
+  char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3]; //OP_CODE + 3 pipe paths + 3 spaces + \0
   size_t write_index = 0;
   //Is allways reading from the FIFO waiting for a client to connect
   while (1){
@@ -283,8 +284,8 @@ static void *managing_clients(void* arguments) {
         pthread_mutex_lock(&semExMut);
 
         assing_pipe_data(buffer_data->buffer,write_index,buffer + 2);
-        write_index = (write_index + 1)% MAX_CLIENTS; 
 
+        write_index = (write_index + 1)% MAX_CLIENTS; 
         pthread_mutex_unlock(&semExMut);
 
         sem_post(&empty_buffer);
@@ -307,22 +308,21 @@ static void *client_thread(void *arguments){
 
   char op_buffer[1 + 1 + 41]; //OP_CODE + space + key
   char resp_buffer[4]; //OP_CODE + space + result + \0
-  int result;
+  int result = 0;//it starts at 0 because of the connect
   int disconnect_flag = 0;
   while(1){
   //readMsg function ---------------------------
-  fprintf(stderr,"entrou\n");
+
   sem_wait(&empty_buffer);
   
-
   pthread_mutex_lock(&semExMut);
 
-  fprintf(stderr,"req_pipi_path: %s\n",buffer_data->buffer[*(buffer_data->read_index)].req_pipe_path);
-  fprintf(stderr,"resp_pipe_path: %s\n",buffer_data->buffer[*(buffer_data->read_index)].resp_pipe_path);
-  fprintf(stderr,"notif_pipe_path: %s\n",buffer_data->buffer[*(buffer_data->read_index)].notif_pipe_path);
-  strcpy(req_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].req_pipe_path);
-  strcpy(resp_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].resp_pipe_path);
-  strcpy(notif_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].notif_pipe_path);
+
+  strn_memcpy(req_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].req_pipe_path,MAX_PIPE_PATH_LENGTH);
+  strn_memcpy(resp_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].resp_pipe_path,MAX_PIPE_PATH_LENGTH);
+  strn_memcpy(notif_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].notif_pipe_path,MAX_PIPE_PATH_LENGTH);
+
+
         
   *(buffer_data->read_index) = (*(buffer_data->read_index) + 1) % MAX_CLIENTS;
 
@@ -332,11 +332,14 @@ static void *client_thread(void *arguments){
 
   //--------------------------------------------
 
+  //------Connecting function--------------------------
   req_pipe_fd = open(req_pipe_path, O_RDONLY);
   resp_pipe_fd = open(resp_pipe_path, O_WRONLY);
   notif_pipe_fd = open(notif_pipe_path, O_WRONLY); //falta testar se os opens correram bem
   
-  
+  snprintf(resp_buffer,sizeof(resp_buffer),"%d %d",OP_CODE_CONNECT, result);
+  write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
+  //-------------------------------------------------------------------------------------
     //while the client is connected
     while(!disconnect_flag){
       //read from the request pipe until we get a valid operation
@@ -486,8 +489,8 @@ int requests_buffer_init(struct ManagingClients* buffer,char* fifo_name) {
   }
 
   buffer->fifo_fd = fifo_fd;
-  buffer->read_index = malloc(sizeof(size_t)); //MALOC TEMOS DE DAR FREE
-  buffer->read_index = 0;
+  buffer->read_index = malloc(sizeof(int)); //MALOC TEMOS DE DAR FREE
+  *(buffer->read_index)= 0;
 
   return 0;
 }

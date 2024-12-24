@@ -43,9 +43,8 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
     }
   }
   //Aguardar resposta do servidor
-  if(read_all(filedesc[2],buffer,3,NULL) == -1){
-    return 1;
-  }
+  while(read_all(filedesc[2],buffer,3,NULL) != 1);
+
   int result = buffer[2] - '0';
   printf("Server returned %d for operation: connect\n",OP_CODE_CONNECT);
   return result;
