@@ -27,12 +27,21 @@ struct SharedData {
   pthread_mutex_t directory_mutex;
 };
 
+struct PipeData {
+  char req_pipe_path[MAX_PIPE_PATH_LENGTH];
+  char resp_pipe_path[MAX_PIPE_PATH_LENGTH];
+  char notif_pipe_path[MAX_PIPE_PATH_LENGTH];
+};
+
 struct ManagingClients {
-  //we need to store 3 pipe paths with 2 spaces between them and a \0 at the end
-  char buffer[(MAX_PIPE_PATH_LENGTH * 3 + 2 + 1)* MAX_CLIENTS];
+  //the buffer can have whatever size. 
+  struct PipeData buffer[MAX_CLIENTS];
   size_t *read_index;
   int fifo_fd;
 };
+
+
+
 
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
@@ -250,28 +259,37 @@ static void* get_file(void* arguments) {
   pthread_exit(NULL);
 }
 
+void assing_pipe_data(struct PipeData* buffer,size_t index,char* pipes_path){
+  char* req_pipe_path = strtok(pipes_path," ");
+  char* resp_pipe_path = strtok(NULL," ");
+  char* notif_pipe_path = strtok(NULL," ");
+  strn_memcpy(buffer[index].req_pipe_path,req_pipe_path,MAX_PIPE_PATH_LENGTH);
+  strn_memcpy(buffer[index].resp_pipe_path,resp_pipe_path,MAX_PIPE_PATH_LENGTH);
+  strn_memcpy(buffer[index].notif_pipe_path,notif_pipe_path,MAX_PIPE_PATH_LENGTH);
+  return;
+}
+
 static void *managing_clients(void* arguments) {
   struct ManagingClients* buffer_data = (struct ManagingClients*) arguments;
-  char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3 + 1]; // OP_CODE: nao sei se preciso de fazer code[1]
+  char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3 + 1]; //OP_CODE + 3 pipe paths + 3 spaces + \0
   size_t write_index = 0;
   //Is allways reading from the FIFO waiting for a client to connect
   while (1){
     if(read_all(buffer_data->fifo_fd, buffer,sizeof(buffer), NULL) == 1){
-      printf("Received message: %s\n",buffer);
-      if(buffer[0] == OP_CODE_CONNECT){
+      
+      if(get_code(buffer[0]) == OP_CODE_CONNECT){
         sem_wait(&full_buffer);
 
         pthread_mutex_lock(&semExMut);
 
-        strcpy(buffer_data->buffer + write_index, buffer + 2); //PERIGO: nao sei se esta correto
-        write_index += strlen(buffer - 2) % strlen(buffer_data->buffer); //MUITO CUIDADO NAO SEI SE é -2
+        assing_pipe_data(buffer_data->buffer,write_index,buffer + 2);
+        write_index = (write_index + 1)% MAX_CLIENTS; 
 
         pthread_mutex_unlock(&semExMut);
 
         sem_post(&empty_buffer);
-
       }
-      printf("escrita\n");
+      
     }
   }
   close(buffer_data->fifo_fd);
@@ -283,7 +301,6 @@ static void *client_thread(void *arguments){
   char req_pipe_path[MAX_PIPE_PATH_LENGTH];
   char resp_pipe_path[MAX_PIPE_PATH_LENGTH];
   char notif_pipe_path[MAX_PIPE_PATH_LENGTH];
-  char buffer[MAX_PIPE_PATH_LENGTH * 3 + 2 + 1];
   int req_pipe_fd;
   int resp_pipe_fd;
   int notif_pipe_fd;
@@ -294,22 +311,26 @@ static void *client_thread(void *arguments){
   int disconnect_flag = 0;
   while(1){
   //readMsg function ---------------------------
+  fprintf(stderr,"entrou\n");
   sem_wait(&empty_buffer);
+  
 
   pthread_mutex_lock(&semExMut);
 
-  strcpy(buffer,buffer_data->buffer + *(buffer_data->read_index));
-  *(buffer_data->read_index) = *(buffer_data->read_index) + strlen(buffer) % strlen(buffer_data->buffer);
+  fprintf(stderr,"req_pipi_path: %s\n",buffer_data->buffer[*(buffer_data->read_index)].req_pipe_path);
+  fprintf(stderr,"resp_pipe_path: %s\n",buffer_data->buffer[*(buffer_data->read_index)].resp_pipe_path);
+  fprintf(stderr,"notif_pipe_path: %s\n",buffer_data->buffer[*(buffer_data->read_index)].notif_pipe_path);
+  strcpy(req_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].req_pipe_path);
+  strcpy(resp_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].resp_pipe_path);
+  strcpy(notif_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].notif_pipe_path);
         
+  *(buffer_data->read_index) = (*(buffer_data->read_index) + 1) % MAX_CLIENTS;
+
   pthread_mutex_unlock(&semExMut);
 
   sem_post(&full_buffer);
 
   //--------------------------------------------
-
-  strcpy(req_pipe_path,strtok(buffer, " "));
-  strcpy(resp_pipe_path,strtok(NULL, " "));
-  strcpy(notif_pipe_path,strtok(NULL, " "));
 
   req_pipe_fd = open(req_pipe_path, O_RDONLY);
   resp_pipe_fd = open(resp_pipe_path, O_WRONLY);
@@ -320,8 +341,8 @@ static void *client_thread(void *arguments){
     while(!disconnect_flag){
       //read from the request pipe until we get a valid operation
       while(read_all(req_pipe_fd, op_buffer, sizeof(op_buffer), NULL) != 1);
-  
-      switch (op_buffer[0]){
+      enum Code op_code = get_code(op_buffer[0]);
+      switch (op_code){
         case OP_CODE_SUBSCRIBE:
 
           result = subscribe(op_buffer + 2, notif_pipe_fd);
@@ -347,6 +368,12 @@ static void *client_thread(void *arguments){
 
           //go back to the main loop
           disconnect_flag = 1;
+          break;
+        case OP_CODE_INVALID:
+          fprintf(stderr,"Invalid operation\n");
+          break;
+        case OP_CODE_CONNECT:
+          fprintf(stderr,"Invalid operation\n");
           break;
       }
     }
@@ -382,9 +409,9 @@ static void dispatch_threads(DIR* dir,struct ManagingClients* buffer_data) {
   if(pthread_create(host_thread, NULL, managing_clients, (void*)buffer_data) != 0) {
     fprintf(stderr, "Failed to create host thread\n");
     pthread_mutex_destroy(&thread_data.directory_mutex);
-      free(threads);
-        free(host_thread);
-        free(client_threads);
+    free(threads);
+    free(host_thread);
+    free(client_threads);
     return;
   }
 
@@ -392,9 +419,9 @@ static void dispatch_threads(DIR* dir,struct ManagingClients* buffer_data) {
     if(pthread_create(&client_threads[i], NULL, client_thread , (void*)buffer_data) != 0) {
       fprintf(stderr, "Failed to create client thread\n");
       pthread_mutex_destroy(&thread_data.directory_mutex);
-        free(threads);
-        free(host_thread);
-        free(client_threads);
+      free(threads);
+      free(host_thread);
+      free(client_threads);
       return;
     }
   }
@@ -404,9 +431,9 @@ static void dispatch_threads(DIR* dir,struct ManagingClients* buffer_data) {
     if (pthread_join(threads[i], NULL) != 0) {
       fprintf(stderr, "Failed to join thread %u\n", i);
       pthread_mutex_destroy(&thread_data.directory_mutex);
-        free(threads);
-        free(host_thread);
-        free(client_threads);
+      free(threads);
+      free(host_thread);
+      free(client_threads);
       return;
     }
   }
@@ -414,10 +441,21 @@ static void dispatch_threads(DIR* dir,struct ManagingClients* buffer_data) {
   if (pthread_join(*host_thread, NULL) != 0) {
     fprintf(stderr, "Failed to join host thread\n");
     pthread_mutex_destroy(&thread_data.directory_mutex);
-      free(threads);
-        free(host_thread);
-        free(client_threads);
+    free(threads);
+    free(host_thread);
+    free(client_threads);
     return;
+  }
+
+  for (unsigned int i = 0; i < MAX_CLIENTS; i++) {
+    if (pthread_join(client_threads[i], NULL) != 0) {
+      fprintf(stderr, "Failed to join client thread %u\n", i);
+      pthread_mutex_destroy(&thread_data.directory_mutex);
+      free(threads);
+      free(host_thread);
+      free(client_threads);
+      return;
+    }
   }
   
 

@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include "src/common/constants.h"
+#include "src/common/protocol.h"
  
  
 int read_all(int fd, void *buffer, size_t size, int *intr) {
@@ -93,6 +94,21 @@ int create_pipe(char const* pipe_path) {
   }
   
   return 0;
+}
+
+enum Code get_code(char code) {
+  switch (code) {
+    case '1':
+      return OP_CODE_CONNECT;
+    case '2':
+      return OP_CODE_DISCONNECT;
+    case '3':
+      return OP_CODE_SUBSCRIBE;
+    case '4':
+      return OP_CODE_UNSUBSCRIBE;
+    default:
+      return OP_CODE_INVALID;
+  }
 }
 
 

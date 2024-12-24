@@ -17,7 +17,7 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   //------------------------------------------
   char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3 + 1];
   snprintf(buffer, sizeof(buffer), "%d %s %s %s", OP_CODE_CONNECT,req_pipe_path, resp_pipe_path, notif_pipe_path);
-  printf("Message sent: %s",buffer);
+
   
   if(write_all(filedesc[0], buffer, sizeof(buffer)) == -1){
     return 1;

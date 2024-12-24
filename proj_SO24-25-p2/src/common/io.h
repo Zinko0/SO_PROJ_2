@@ -26,4 +26,6 @@ void delay(unsigned int time_ms);
 
 int create_pipe(char const* pipe_path);
 
+enum Code get_code(char c);
+
 #endif  // COMMON_IO_H
