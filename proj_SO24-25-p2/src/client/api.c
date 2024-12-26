@@ -41,9 +41,9 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   if(create_pipe(notif_pipe_path) == -1){
     return 1;
   }
-  filedesc[1] = open(req_pipe_path,O_WRONLY);
-  filedesc[2] = open(resp_pipe_path,O_RDONLY);
-  filedesc[3] = open(notif_pipe_path,O_RDONLY);
+  filedesc[1] = open(aux_req,O_WRONLY);
+  filedesc[2] = open(aux_resp,O_RDONLY);
+  filedesc[3] = open(aux_notif,O_RDONLY);
   for(int i = 1; i < 4; i++){
     if(filedesc[i] == -1){
       return 1;
@@ -52,9 +52,8 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   //Aguardar resposta do servidor
   while(read_all(filedesc[2],buffer,3,NULL) != 1);
 
-  int result = buffer[2] - '0';
-  printf("Server returned %d for operation: connect\n",OP_CODE_CONNECT);
-  return result;
+  printf("Server returned %c for operation: connect\n",buffer[2]);
+  return 0;
 }
  
 int kvs_disconnect(void) {
@@ -68,16 +67,14 @@ int kvs_disconnect(void) {
   //-------------------------------------------
   //Aguardar resposta do servidor
 
-  if(read_all(filedesc[2],buffer,3,NULL) == -1){
-    return 1;
-  }
-  int result = buffer[2] - '0';
+  while(read_all(filedesc[2],buffer,3,NULL) != 1);
+
   for(int i = 0; i < 4; i++){
     if(close(filedesc[i]) == -1){
       return 1;
     }
   }
-  printf("Server returned %d for operation: disconnect\n",result);
+  printf("Server returned %d for operation: disconnect\n",buffer[2]);
   return 0;
 }
 
@@ -89,11 +86,9 @@ int kvs_subscribe(const char* key) {
     return 1;
   }
   
-  if(read_all(filedesc[2],buffer,3,NULL) == -1){
-    return 1;
-  }
-  int result = buffer[2] - '0';
-  printf("Server returned %d for operation: subscribe\n",result);
+  while(read_all(filedesc[2],buffer,3,NULL) != 1);
+
+  printf("Server returned %d for operation: subscribe\n",buffer[2]);
   
   return 0;
 }
@@ -106,19 +101,19 @@ int kvs_unsubscribe(const char* key) {
     return 1;
   }
   //response of type: "%c %c\n" -> OP_CODE_UNSUBSCRIBE, result
-  if(read_all(filedesc[2],buffer,3,NULL) == -1){
-    return 1;
-  }
-  int result = buffer[2] - '0';
-  printf("Server returned %d for operation: unsubscribe\n",result);
+
+  while(read_all(filedesc[2],buffer,3,NULL) == -1);
+
+  printf("Server returned %d for operation: unsubscribe\n",buffer[2]);
   return 0;
 }
 
 void *kvs_get_notification(void* arg) {
   int* connected = (int*) arg;
   // read from notification pipe
-  char buffer[MAX_STRING_SIZE*2 + strlen("(,)" + 1)];
-  while (connected){
+  char buffer[MAX_STRING_SIZE*2 + strlen("(,)") + 1];
+
+  while (*connected){
     while(read_all(filedesc[3],buffer,sizeof(buffer)*sizeof(char),NULL) != 1){
       printf("%s\n",buffer);
     }
