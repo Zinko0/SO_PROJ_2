@@ -28,6 +28,8 @@ int create_pipe(char const* pipe_path);
 
 enum Code get_code(char c);
 
-void string_filling(const char* str, size_t size, char* aux);
+void pipe_string_filling(const char* str, size_t size, char* aux);
+
+void key_string_filling(const char* str, size_t length, char* aux);
 
 #endif  // COMMON_IO_H

@@ -111,11 +111,16 @@ enum Code get_code(char code) {
   }
 }
 
-void string_filling(const char* str, size_t length, char* aux) {
+void pipe_string_filling(const char* str, size_t length, char* aux) {
   strcpy(aux, str);
   for(size_t i = length; i < MAX_STRING_SIZE; i++){
     aux[i] = '\0';
   }
 }
 
-
+void key_string_filling(const char* str, size_t length, char* aux) {
+  strcpy(aux, str);
+  for(size_t i = length; i < MAX_STRING_SIZE; i++){
+    aux[i] = '\0';
+  }
+} 
