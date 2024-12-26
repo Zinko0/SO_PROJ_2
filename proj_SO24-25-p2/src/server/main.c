@@ -305,7 +305,8 @@ static void *client_thread(void *arguments){
   int resp_pipe_fd;
   int notif_pipe_fd;
 
-  char op_buffer[1 + 1 + 41]; //OP_CODE + space + key
+  char op_buffer[2]; //OP_CODE + space
+  char key[MAX_STRING_SIZE + 1]; //key + \0
   char resp_buffer[4]; //OP_CODE + space + result + \0
   int result = 0;//it starts at 0 because of the connect
   int disconnect_flag = 0;
@@ -343,17 +344,15 @@ static void *client_thread(void *arguments){
       enum Code op_code = get_code(op_buffer[0]);
       switch (op_code){
         case OP_CODE_SUBSCRIBE:
-          printf("key: %s\n", op_buffer + 2);
-          result = subscribe(op_buffer + 2, notif_pipe_fd);
-          printf("result: %d\n", result);
-          snprintf(resp_buffer, sizeof(resp_buffer), "%d %d", OP_CODE_SUBSCRIBE ,result);
-          printf("resp_buffer: %s\n",resp_buffer);
+          read_all(req_pipe_fd,key,sizeof(key),NULL);
+          result = subscribe(key, notif_pipe_fd);
+          snprintf(resp_buffer, sizeof(resp_buffer),"%d %d", OP_CODE_SUBSCRIBE ,result);
           write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
           break;
 
         case OP_CODE_UNSUBSCRIBE:
-          printf("key: %s\n", op_buffer + 2);
-          result = unsubscribe(op_buffer + 2, notif_pipe_fd);
+          read_all(req_pipe_fd,key,sizeof(key),NULL);
+          result = unsubscribe(key, notif_pipe_fd);
           snprintf(resp_buffer, sizeof(resp_buffer), "%d %d", OP_CODE_UNSUBSCRIBE ,result);
           write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
           break;
@@ -364,9 +363,8 @@ static void *client_thread(void *arguments){
           snprintf(resp_buffer, sizeof(resp_buffer), "%d %d", OP_CODE_DISCONNECT ,result);
           write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));        
           close(req_pipe_fd);
-          close(resp_pipe_fd);
           close(notif_pipe_fd);
-
+          close(resp_pipe_fd);
           //go back to the main loop
           disconnect_flag = 1;
           break;
@@ -377,7 +375,7 @@ static void *client_thread(void *arguments){
           fprintf(stderr,"Invalid operation\n");
           break;
       }
-    }
+    }          
   }
   pthread_exit(NULL);
 }
