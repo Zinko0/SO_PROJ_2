@@ -343,24 +343,26 @@ static void *client_thread(void *arguments){
       enum Code op_code = get_code(op_buffer[0]);
       switch (op_code){
         case OP_CODE_SUBSCRIBE:
-
+          printf("key: %s\n", op_buffer + 2);
           result = subscribe(op_buffer + 2, notif_pipe_fd);
+          printf("result: %d\n", result);
           snprintf(resp_buffer, sizeof(resp_buffer), "%d %d", OP_CODE_SUBSCRIBE ,result);
-          write(resp_pipe_fd, resp_buffer, sizeof(char) * sizeof(resp_buffer));
+          printf("resp_buffer: %s\n",resp_buffer);
+          write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
           break;
 
         case OP_CODE_UNSUBSCRIBE:
-
+          printf("key: %s\n", op_buffer + 2);
           result = unsubscribe(op_buffer + 2, notif_pipe_fd);
           snprintf(resp_buffer, sizeof(resp_buffer), "%d %d", OP_CODE_UNSUBSCRIBE ,result);
-          write(resp_pipe_fd, resp_buffer, sizeof(char) * sizeof(resp_buffer));
+          write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
           break;
 
         case OP_CODE_DISCONNECT:
           
           result = disconnect(notif_pipe_fd);
           snprintf(resp_buffer, sizeof(resp_buffer), "%d %d", OP_CODE_DISCONNECT ,result);
-          write(resp_pipe_fd, resp_buffer, sizeof(char) * sizeof(resp_buffer));        
+          write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));        
           close(req_pipe_fd);
           close(resp_pipe_fd);
           close(notif_pipe_fd);
