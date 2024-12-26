@@ -15,8 +15,15 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   //abro o pipe (o server já deve estar aberto)
   filedesc[0] = open(server_pipe_path,O_WRONLY);
   //------------------------------------------
+  
   char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3 + 1];
-  snprintf(buffer, sizeof(buffer), "%d %s %s %s", OP_CODE_CONNECT,req_pipe_path, resp_pipe_path, notif_pipe_path);
+  char aux_req[MAX_PIPE_PATH_LENGTH];
+  char aux_resp[MAX_PIPE_PATH_LENGTH];
+  char aux_notif[MAX_PIPE_PATH_LENGTH];
+  string_filling(req_pipe_path,strlen(req_pipe_path),aux_req);
+  string_filling(resp_pipe_path,strlen(resp_pipe_path),aux_resp);
+  string_filling(notif_pipe_path,strlen(notif_pipe_path),aux_notif);
+  snprintf(buffer, sizeof(buffer), "%d %s %s %s", OP_CODE_CONNECT,aux_req, aux_resp, aux_notif);
 
   
   if(write_all(filedesc[0], buffer, sizeof(buffer)) == -1){

@@ -260,19 +260,18 @@ static void* get_file(void* arguments) {
 }
 
 void assing_pipe_data(struct PipeData* buffer,size_t index,char* pipes_path){
-  //printf("pipes path: %s\n",pipes_path);
   char* req_pipe_path = strtok(pipes_path," ");
   char* resp_pipe_path = strtok(NULL," ");
-  char* notif_pipe_path = strtok(NULL," "); //está com um char a mais por alguma razao
-  strn_memcpy(buffer[index].req_pipe_path,req_pipe_path,MAX_PIPE_PATH_LENGTH);
-  strn_memcpy(buffer[index].resp_pipe_path,resp_pipe_path,MAX_PIPE_PATH_LENGTH);
-  strn_memcpy(buffer[index].notif_pipe_path,notif_pipe_path,MAX_PIPE_PATH_LENGTH);
+  char* notif_pipe_path = strtok(NULL,""); //está com um char a mais por alguma razao
+  strncpy(buffer[index].req_pipe_path,req_pipe_path,MAX_PIPE_PATH_LENGTH);
+  strncpy(buffer[index].resp_pipe_path,resp_pipe_path,MAX_PIPE_PATH_LENGTH);
+  strncpy(buffer[index].notif_pipe_path,notif_pipe_path,MAX_PIPE_PATH_LENGTH);
   return;
 }
 
 static void *managing_clients(void* arguments) {
   struct ManagingClients* buffer_data = (struct ManagingClients*) arguments;
-  char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3]; //OP_CODE + 3 pipe paths + 3 spaces + \0
+  char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3 + 1]; //OP_CODE + 3 pipe paths + 3 spaces + \0
   size_t write_index = 0;
   //Is allways reading from the FIFO waiting for a client to connect
   while (1){
@@ -317,12 +316,9 @@ static void *client_thread(void *arguments){
   
   pthread_mutex_lock(&semExMut);
 
-
-  strn_memcpy(req_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].req_pipe_path,MAX_PIPE_PATH_LENGTH);
-  strn_memcpy(resp_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].resp_pipe_path,MAX_PIPE_PATH_LENGTH);
-  strn_memcpy(notif_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].notif_pipe_path,MAX_PIPE_PATH_LENGTH);
-
-
+  strncpy(req_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].req_pipe_path,MAX_PIPE_PATH_LENGTH);
+  strncpy(resp_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].resp_pipe_path,MAX_PIPE_PATH_LENGTH);
+  strncpy(notif_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].notif_pipe_path,MAX_PIPE_PATH_LENGTH);
         
   *(buffer_data->read_index) = (*(buffer_data->read_index) + 1) % MAX_CLIENTS;
 
@@ -482,7 +478,7 @@ int requests_buffer_init(struct ManagingClients* buffer,char* fifo_name) {
     unlink(fifo_name);
     return 1;
   }
-  printf("FIFO NAME: %s\n",fifo_name);
+
   fifo_fd = open(fifo_name, O_RDONLY);
   if (fifo_fd == -1) {
     return 1;

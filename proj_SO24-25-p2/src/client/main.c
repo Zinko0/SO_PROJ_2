@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "Failed to connect to the server\n");
     return 1;
   }
-  printf("passou kvs connect\n");
+
   *connected = 1;
 
   pthread_t notif_thread;
