@@ -116,11 +116,15 @@ int kvs_unsubscribe(const char* key) {
 void *kvs_get_notification(void* arg) {
   (void)arg;//to avoid unused parameter warning----------------------------------------------------
   // read from notification pipe
-  char buffer[(MAX_STRING_SIZE+1)*2 + strlen("(,)") + 1];
+  char buffer[(MAX_STRING_SIZE+1)*2];
+  char key[MAX_STRING_SIZE+1];
+  char value[MAX_STRING_SIZE+1];
   while (connected){
     //to make sure that the read_all only tries to read if the client is still connected
     if (connected && read_all(filedesc[3], buffer, sizeof(buffer), NULL) == 1) {
-      printf("%s\n", buffer);
+      strncpy(key, buffer, MAX_STRING_SIZE+1);
+      strncpy(value, buffer + MAX_STRING_SIZE+1, MAX_STRING_SIZE+1);
+      printf("(%s,%s)\n", key,value);
     }
   }
   return NULL;
