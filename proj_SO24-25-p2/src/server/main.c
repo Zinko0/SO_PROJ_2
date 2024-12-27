@@ -34,15 +34,28 @@ struct PipeData {
   char notif_pipe_path[MAX_PIPE_PATH_LENGTH];
 };
 
+struct ActiveClients {
+  int req_fd;
+  int resp_fd;
+  int notif_fd;
+};
+
 struct ManagingClients {
   //the buffer can have whatever size. 
   struct PipeData buffer[MAX_CLIENTS];
   int *read_index;
   int fifo_fd;
+
+  struct ActiveClients active_clients[MAX_CLIENTS];
+  int *active_clients_index;
 };
+
+
 
 sigset_t set_with_sigusr1;
 int* signal_received = 0;
+
+
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t n_current_backups_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -355,7 +368,7 @@ static void *client_thread(void *arguments){
   sem_post(&full_buffer);
 
   //--------------------------------------------
-
+  
   //------Connecting function--------------------------
   req_pipe_fd = open(req_pipe_path, O_RDONLY);
   resp_pipe_fd = open(resp_pipe_path, O_WRONLY);
@@ -363,6 +376,18 @@ static void *client_thread(void *arguments){
   
   snprintf(resp_buffer,sizeof(resp_buffer),"%d %d",OP_CODE_CONNECT, result);
   write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
+
+  //lock
+  
+  for(int i = 0; i < MAX_CLIENTS; i++){
+    if(buffer_data->active_clients[i].req_fd == 0){ //CUIDADO PQ O 0 É UM VALOR VALIDO MAS O STDOUT NAO FOI FECHADO
+      buffer_data->active_clients[*(buffer_data->active_clients_index)].req_fd = req_pipe_fd;
+      buffer_data->active_clients[*(buffer_data->active_clients_index)].resp_fd = resp_pipe_fd;
+      buffer_data->active_clients[*(buffer_data->active_clients_index)].notif_fd = notif_pipe_fd;
+      break;
+    }
+  }
+  //unlock
   //-------------------------------------------------------------------------------------
     //while the client is connected
     while(!disconnect_flag){
@@ -384,6 +409,7 @@ static void *client_thread(void *arguments){
       enum Code op_code = get_code(op_buffer[0]);
       switch (op_code){
         case OP_CODE_SUBSCRIBE:
+          //if read_all fails beacuse of no file descriptor it needs to break the loop
           read_all(req_pipe_fd,key,sizeof(key),NULL);
           result = subscribe(key, notif_pipe_fd);
           snprintf(resp_buffer, sizeof(resp_buffer),"%d %d", OP_CODE_SUBSCRIBE ,result);
@@ -400,6 +426,7 @@ static void *client_thread(void *arguments){
         case OP_CODE_DISCONNECT:
           
           result = disconnect(notif_pipe_fd);
+          //apagar o cliente da lista de clientes ativos usando o i 
           snprintf(resp_buffer, sizeof(resp_buffer), "%d %d", OP_CODE_DISCONNECT ,result);
           write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
           close(req_pipe_fd);
@@ -526,6 +553,8 @@ int requests_buffer_init(struct ManagingClients* buffer,char* fifo_name) {
   buffer->fifo_fd = fifo_fd;
   buffer->read_index = malloc(sizeof(int)); //MALOC TEMOS DE DAR FREE
   *(buffer->read_index)= 0;
+  buffer->active_clients_index = malloc(sizeof(int)); //MALOC TEMOS DE DAR FREE
+  *(buffer->active_clients_index) = 0;
 
   return 0;
 }

@@ -40,6 +40,7 @@ int main(int argc, char* argv[]) {
   pthread_create(&notif_thread, NULL, kvs_get_notification, NULL);
 
   while (1) {
+    //in case of SIGUSR1
     if (connected == 0) {
       if (kvs_disconnect() != 0) {
           fprintf(stderr, "Failed to disconnect to the server\n");
