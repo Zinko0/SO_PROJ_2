@@ -189,7 +189,7 @@ int subscribe(char *key, int fd) {
   pthread_rwlock_wrlock(&kvs_table->tablelock);
 
   if (write_subscription(kvs_table, key, fd) != 0) {
-    //saber o que fazer em caso de erro
+    pthread_rwlock_unlock(&kvs_table->tablelock);
     return 0;
   }
   
@@ -206,7 +206,7 @@ int unsubscribe(char *key, int fd) {
   pthread_rwlock_wrlock(&kvs_table->tablelock);
 
   if (delete_subscription(kvs_table, key, fd) != 0) {
-    //saber o que fazer em caso de erro
+    pthread_rwlock_unlock(&kvs_table->tablelock);
     return 1;
   }
   
@@ -217,7 +217,7 @@ int unsubscribe(char *key, int fd) {
 int disconnect(int fd) {
   //percorrer a lista de keys e dar delete_subscription
   KeyNode *keyNode;
-  //temos de dar loc à tabela toda (podemos depois usar a tática do show que vai libertar os locks a cada iteração)
+  //temos de dar lock à tabela toda (podemos depois usar a tática do show que vai libertar os locks a cada iteração)
   pthread_rwlock_wrlock(&kvs_table->tablelock);
 
   for(int i = 0; i < TABLE_SIZE; i++){

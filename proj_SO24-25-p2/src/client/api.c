@@ -8,6 +8,7 @@
 #include "api.h"
 
 int filedesc[4];
+int connected;
 
 int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char const* server_pipe_path,
                 char const* notif_pipe_path) {
@@ -52,7 +53,7 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   //Aguardar resposta do servidor
   char resp_buffer[4];
   while(read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL) != 1);
-
+  connected = 1;
   printf("Server returned %c for operation: connect\n",resp_buffer[2]);
   return 0;
 }
@@ -60,7 +61,7 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
 int kvs_disconnect(void) {
   // close pipes 
   //-------------------------------------------
-  char buffer[3]; //OP_CODE_DISCONNECT
+  char buffer[2]; //OP_CODE_DISCONNECT
   sprintf(buffer, "%d", OP_CODE_DISCONNECT);
   if(write_all(filedesc[1],buffer, sizeof(buffer)) == -1){
     return 1;
@@ -69,7 +70,7 @@ int kvs_disconnect(void) {
   //Aguardar resposta do servidor
   char resp_buffer[4];
   while(read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL) != 1);
-
+  connected = 0;
   for(int i = 0; i < 4; i++){
     if(close(filedesc[i]) == -1){
       return 1;
@@ -113,11 +114,12 @@ int kvs_unsubscribe(const char* key) {
 }
 
 void *kvs_get_notification(void* arg) {
-  int* connected = (int*) arg;
+  (void)arg;//to avoid unused parameter warning----------------------------------------------------
   // read from notification pipe
   char buffer[(MAX_STRING_SIZE+1)*2 + strlen("(,)") + 1];
   while (connected){
-    if (read_all(filedesc[3], buffer, sizeof(buffer), NULL) == 1) {
+    //to make sure that the read_all only tries to read if the client is still connected
+    if (connected && read_all(filedesc[3], buffer, sizeof(buffer), NULL) == 1) {
       printf("%s\n", buffer);
     }
   }

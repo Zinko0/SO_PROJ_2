@@ -23,7 +23,6 @@ int main(int argc, char* argv[]) {
   char keys[MAX_NUMBER_SUB][MAX_STRING_SIZE] = {0};
   unsigned int delay_ms;
   size_t num;
-  int* connected = malloc(sizeof(int));
 
   strncat(req_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
   strncat(resp_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
@@ -33,12 +32,11 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "Failed to connect to the server\n");
     return 1;
   }
-
-  *connected = 1;
+  
 
   pthread_t notif_thread;
   printf("Connected to server\n");
-  pthread_create(&notif_thread, NULL, kvs_get_notification, (void*)connected);
+  pthread_create(&notif_thread, NULL, kvs_get_notification, NULL);
 
   while (1) {
     switch (get_next(STDIN_FILENO)) {
@@ -47,7 +45,7 @@ int main(int argc, char* argv[]) {
           fprintf(stderr, "Failed to disconnect to the server\n");
           return 1;
         }
-        *connected = 0;
+        
         pthread_join(notif_thread, NULL);
         // TODO: end notifications thread
         printf("Disconnected from server\n");

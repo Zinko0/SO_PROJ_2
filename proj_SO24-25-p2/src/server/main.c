@@ -424,7 +424,6 @@ static void dispatch_threads(DIR* dir,struct ManagingClients* buffer_data) {
       return;
     }
   }
-  // ler do FIFO de registo
 
   for (unsigned int i = 0; i < max_threads; i++) {
     if (pthread_join(threads[i], NULL) != 0) {
