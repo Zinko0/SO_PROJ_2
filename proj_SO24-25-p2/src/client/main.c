@@ -10,6 +10,8 @@
 #include "src/common/constants.h"
 #include "src/common/io.h"
 
+int connected;
+
 int main(int argc, char* argv[]) {
   if (argc < 3) {
     fprintf(stderr, "Usage: %s <client_unique_id> <register_pipe_path>\n", argv[0]);
@@ -32,13 +34,22 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "Failed to connect to the server\n");
     return 1;
   }
-  
 
   pthread_t notif_thread;
   printf("Connected to server\n");
   pthread_create(&notif_thread, NULL, kvs_get_notification, NULL);
 
   while (1) {
+    if (connected == 0) {
+      if (kvs_disconnect() != 0) {
+          fprintf(stderr, "Failed to disconnect to the server\n");
+          return 1;
+      }
+      pthread_join(notif_thread, NULL);
+      
+      printf("Disconnected from server\n");
+      return 0;
+    }
     switch (get_next(STDIN_FILENO)) {
       case CMD_DISCONNECT:
         if (kvs_disconnect() != 0) {
@@ -52,6 +63,10 @@ int main(int argc, char* argv[]) {
         return 0;
 
       case CMD_SUBSCRIBE:
+        if (connected == 0) {
+          fprintf(stderr, "Can't subscribe, server disconnected\n");
+          break;
+        }
         num = parse_list(STDIN_FILENO, keys, 1, MAX_STRING_SIZE);
         if (num == 0) {
           fprintf(stderr, "Invalid command. See HELP for usage\n");
@@ -65,6 +80,10 @@ int main(int argc, char* argv[]) {
         break;
 
       case CMD_UNSUBSCRIBE:
+        if (connected == 0) {
+          fprintf(stderr, "Can't unsubscribe, server disconnected\n");
+          break;
+        }
         num = parse_list(STDIN_FILENO, keys, 1, MAX_STRING_SIZE);
         if (num == 0) {
           fprintf(stderr, "Invalid command. See HELP for usage\n");
@@ -78,6 +97,10 @@ int main(int argc, char* argv[]) {
         break;
 
       case CMD_DELAY:
+        if (connected == 0) {
+          fprintf(stderr, "Can't delay, server disconnected\n");
+          break;
+        }
         if (parse_delay(STDIN_FILENO, &delay_ms) == -1) {
           fprintf(stderr, "Invalid command. See HELP for usage\n");
           continue;

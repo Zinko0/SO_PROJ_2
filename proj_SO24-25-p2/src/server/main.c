@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <semaphore.h>
 #include <sys/types.h>
+#include <signal.h>
 
 #include "constants.h"
 #include "parser.h"
@@ -40,9 +41,8 @@ struct ManagingClients {
   int fifo_fd;
 };
 
-
-
-
+sigset_t set_with_sigusr1;
+int* signal_received = 0;
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t n_current_backups_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -55,6 +55,18 @@ size_t max_backups;            // Maximum allowed simultaneous backups
 size_t max_threads;            // Maximum allowed simultaneous threads
 
 char* jobs_directory = NULL;
+
+void initialize_global_sigset() {
+    // Initialize the signal set
+    sigemptyset(&set_with_sigusr1);
+    sigaddset(&set_with_sigusr1, SIGUSR1);
+}
+
+static void sigusr1_handler(int signo) {
+    if (signo == SIGUSR1) {
+        *signal_received = 1;
+    }
+}
 
 int filter_job_files(const struct dirent* entry) {
     const char* dot = strrchr(entry->d_name, '.');
@@ -194,6 +206,11 @@ static int run_job(int in_fd, int out_fd, char* filename) {
 
 //frees arguments
 static void* get_file(void* arguments) {
+  if (pthread_sigmask(SIG_BLOCK, &set_with_sigusr1, NULL) != 0) {
+    perror("pthread_sigmask");
+    return NULL;
+  }
+
   struct SharedData* thread_data = (struct SharedData*) arguments;
   DIR* dir = thread_data->dir;
   char* dir_name = thread_data->dir_name;
@@ -273,6 +290,12 @@ static void *managing_clients(void* arguments) {
   struct ManagingClients* buffer_data = (struct ManagingClients*) arguments;
   char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3 + 1]; //OP_CODE + 3 pipe paths + 3 spaces + \0
   size_t write_index = 0;
+  //Handle SIGUSR1
+  if (signal(SIGUSR1, sigusr1_handler) == SIG_ERR) {
+    perror("signal");
+    return NULL;
+  }
+
   //Is allways reading from the FIFO waiting for a client to connect
   while (1){
     if(read_all(buffer_data->fifo_fd, buffer,sizeof(buffer), NULL) == 1){
@@ -297,6 +320,10 @@ static void *managing_clients(void* arguments) {
 }
 
 static void *client_thread(void *arguments){
+  if (pthread_sigmask(SIG_BLOCK, &set_with_sigusr1, NULL) != 0) {
+    perror("pthread_sigmask");
+    return NULL;
+  }
   struct ManagingClients* buffer_data = (struct ManagingClients*) arguments;
   char req_pipe_path[MAX_PIPE_PATH_LENGTH];
   char resp_pipe_path[MAX_PIPE_PATH_LENGTH];
@@ -340,7 +367,20 @@ static void *client_thread(void *arguments){
     //while the client is connected
     while(!disconnect_flag){
       //read from the request pipe until we get a valid operation
-      while(read_all(req_pipe_fd, op_buffer, sizeof(op_buffer), NULL) != 1);
+      while((read_all(req_pipe_fd, op_buffer, sizeof(op_buffer), NULL) != 1) || (*signal_received == 1)){
+        if(*signal_received == 1){
+          result = disconnect(notif_pipe_fd);
+          snprintf(resp_buffer, sizeof(resp_buffer), "%d %d", OP_CODE_DISCONNECT ,result);
+          write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
+          close(req_pipe_fd);
+          close(notif_pipe_fd);
+          close(resp_pipe_fd);
+          //go back to the main loop
+          disconnect_flag = 1;
+          *signal_received = 0;
+          break;
+        }
+      }
       enum Code op_code = get_code(op_buffer[0]);
       switch (op_code){
         case OP_CODE_SUBSCRIBE:
@@ -537,6 +577,9 @@ int main(int argc, char** argv) {
   //initialize the semaphore
   sem_init(&full_buffer, 0, MAX_CLIENTS);
   sem_init(&empty_buffer, 0, 0);
+
+  //initialize the global sigset
+  initialize_global_sigset();
 
   if (kvs_init()) {
     write_str(STDERR_FILENO, "Failed to initialize KVS\n");

@@ -2,13 +2,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 #include "src/common/constants.h"
 #include "src/common/protocol.h"
 #include "src/common/io.h"
 #include "api.h"
 
-int filedesc[4];
 int connected;
+
+int filedesc[4];
 
 int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char const* server_pipe_path,
                 char const* notif_pipe_path) {
@@ -119,12 +121,18 @@ void *kvs_get_notification(void* arg) {
   char buffer[(MAX_STRING_SIZE+1)*2];
   char key[MAX_STRING_SIZE+1];
   char value[MAX_STRING_SIZE+1];
+  int read_all_result;
   while (connected){
     //to make sure that the read_all only tries to read if the client is still connected
-    if (connected && read_all(filedesc[3], buffer, sizeof(buffer), NULL) == 1) {
+    read_all_result = read_all(filedesc[3], buffer, sizeof(buffer), NULL);
+    if (connected && read_all_result == 1) {
       strncpy(key, buffer, MAX_STRING_SIZE+1);
       strncpy(value, buffer + MAX_STRING_SIZE+1, MAX_STRING_SIZE+1);
       printf("(%s,%s)\n", key,value);
+    }
+    if (read_all_result == -1 && errno == EBADF) {
+      connected = 0;
+      break;
     }
   }
   return NULL;
