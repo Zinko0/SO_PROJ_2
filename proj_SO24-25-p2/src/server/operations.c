@@ -237,3 +237,23 @@ int disconnect(int fd) {
   return 0;
 }
 
+int disconnect_all() {
+  //percorrer a lista de keys e dar delete_subscription
+  KeyNode *keyNode;
+  //temos de dar lock à tabela toda (podemos depois usar a tática do show que vai libertar os locks a cada iteração)
+  pthread_rwlock_wrlock(&kvs_table->tablelock);
+
+  for(int i = 0; i < TABLE_SIZE; i++){
+    keyNode = kvs_table->table[i];
+    while(keyNode != NULL){
+      for(int j = 0; j < MAX_CLIENTS; j++){
+        keyNode->subscribers_fds[j] = 0;
+      }
+      keyNode = keyNode->next;
+    }
+  }
+
+  pthread_rwlock_unlock(&kvs_table->tablelock);
+  
+  return 0;
+}

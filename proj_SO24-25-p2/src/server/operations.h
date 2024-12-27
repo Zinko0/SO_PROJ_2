@@ -75,4 +75,7 @@ int unsubscribe(char *key, int fd);
 /// @param fd File descriptor of the client.
 /// @return 0 if the client was disconnected successfully, 1 otherwise.
 int disconnect(int fd);
+
+int disconnect_all();
+
 #endif  // KVS_OPERATIONS_H

@@ -299,6 +299,16 @@ void assing_pipe_data(struct PipeData* buffer,size_t index,char* pipes_path){
   return;
 }
 
+void close_all_clients(struct ActiveClients* active_clients){
+  for(int i = 0; i < MAX_CLIENTS; i++){
+    if(active_clients[i].req_fd != 0){
+      close(active_clients[i].req_fd);
+      close(active_clients[i].resp_fd);
+      close(active_clients[i].notif_fd);
+    }
+  }
+}
+
 static void *managing_clients(void* arguments) {
   struct ManagingClients* buffer_data = (struct ManagingClients*) arguments;
   char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3 + 1]; //OP_CODE + 3 pipe paths + 3 spaces + \0
@@ -311,7 +321,8 @@ static void *managing_clients(void* arguments) {
 
   //Is allways reading from the FIFO waiting for a client to connect
   while (1){
-    if(read_all(buffer_data->fifo_fd, buffer,sizeof(buffer), NULL) == 1){
+    int read_result = read_all(buffer_data->fifo_fd, buffer, sizeof(buffer), NULL);
+    if(read_result == 1){
       
       if(get_code(buffer[0]) == OP_CODE_CONNECT){
         sem_wait(&full_buffer);
@@ -326,6 +337,16 @@ static void *managing_clients(void* arguments) {
         sem_post(&empty_buffer);
       }
       
+    }
+    if(*signal_received == 0){
+      close_all_clients(buffer_data->active_clients);
+      for(int i = 0; i < MAX_CLIENTS; i++){
+        buffer_data->active_clients[*(buffer_data->active_clients_index)].req_fd = 0;
+        buffer_data->active_clients[*(buffer_data->active_clients_index)].resp_fd = 0;
+        buffer_data->active_clients[*(buffer_data->active_clients_index)].notif_fd = 0;
+      }
+      disconnect_all();
+      break;
     }
   }
   close(buffer_data->fifo_fd);
@@ -344,6 +365,8 @@ static void *client_thread(void *arguments){
   int req_pipe_fd;
   int resp_pipe_fd;
   int notif_pipe_fd;
+
+  int read_all_result;
 
   char op_buffer[2]; //OP_CODE + space
   char key[MAX_STRING_SIZE + 1]; //key + \0
@@ -392,25 +415,21 @@ static void *client_thread(void *arguments){
     //while the client is connected
     while(!disconnect_flag){
       //read from the request pipe until we get a valid operation
-      while((read_all(req_pipe_fd, op_buffer, sizeof(op_buffer), NULL) != 1) || (*signal_received == 1)){
-        if(*signal_received == 1){
-          result = disconnect(notif_pipe_fd);
-          snprintf(resp_buffer, sizeof(resp_buffer), "%d %d", OP_CODE_DISCONNECT ,result);
-          write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
-          close(req_pipe_fd);
-          close(notif_pipe_fd);
-          close(resp_pipe_fd);
-          //go back to the main loop
-          disconnect_flag = 1;
-          *signal_received = 0;
-          break;
-        }
+      read_all_result = read_all(req_pipe_fd, op_buffer, sizeof(op_buffer), NULL);
+      while(read_all_result != 1 || (read_all_result != -1 && errno != EBADF));
+      if (read_all_result == -1){
+        disconnect_flag = 1;
+        break;
       }
       enum Code op_code = get_code(op_buffer[0]);
       switch (op_code){
         case OP_CODE_SUBSCRIBE:
           //if read_all fails beacuse of no file descriptor it needs to break the loop
           read_all(req_pipe_fd,key,sizeof(key),NULL);
+          if (errno == EBADF){
+            disconnect_flag = 1;
+            break;
+          }
           result = subscribe(key, notif_pipe_fd);
           snprintf(resp_buffer, sizeof(resp_buffer),"%d %d", OP_CODE_SUBSCRIBE ,result);
           write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
@@ -418,6 +437,10 @@ static void *client_thread(void *arguments){
 
         case OP_CODE_UNSUBSCRIBE:
           read_all(req_pipe_fd,key,sizeof(key),NULL);
+          if (errno == EBADF){
+            disconnect_flag = 1;
+            break;
+          }
           result = unsubscribe(key, notif_pipe_fd);
           snprintf(resp_buffer, sizeof(resp_buffer), "%d %d", OP_CODE_UNSUBSCRIBE ,result);
           write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
