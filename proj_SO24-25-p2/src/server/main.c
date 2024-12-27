@@ -361,7 +361,7 @@ static void *client_thread(void *arguments){
           
           result = disconnect(notif_pipe_fd);
           snprintf(resp_buffer, sizeof(resp_buffer), "%d %d", OP_CODE_DISCONNECT ,result);
-          write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));        
+          write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
           close(req_pipe_fd);
           close(notif_pipe_fd);
           close(resp_pipe_fd);

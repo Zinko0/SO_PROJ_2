@@ -124,3 +124,15 @@ void key_string_filling(const char* str, size_t length, char* aux) {
     aux[i] = '\0';
   }
 } 
+
+void key_value_string_filling(const char* key, const char* value, size_t key_length, size_t value_length, char* aux) {
+  aux[0] = '(';
+  strcpy(aux + 1, key);
+  aux[key_length + 1] = ',';
+  strcpy(aux + key_length + 2, value);
+  aux[key_length + 2 + value_length] = ')';
+  size_t total_length = key_length + 3 + value_length;
+  for(size_t i = total_length; i < MAX_STRING_SIZE; i++){
+    aux[i] = '\0';
+  }
+}

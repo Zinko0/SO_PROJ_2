@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <stdlib.h>
 
+#include "src/common/io.h"
+
 // Hash function based on key initial.
 // @param key Lowercase alphabetical string.
 // @return hash.
@@ -68,7 +70,7 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
             for(int i = 0; i < MAX_CLIENTS; i++) {
                 if (keyNode->subscribers_fds[i] != 0) {
                     char str[1 + MAX_STRING_SIZE + 1 + MAX_STRING_SIZE + 1];
-                    snprintf(str, sizeof(str), "(%s,%s)", key, value);
+                    key_value_string_filling((const char*)key, (const char*)value, strlen(key), strlen(value), str);
                     write(keyNode->subscribers_fds[i], str, sizeof(str));
                 }
             }
@@ -140,7 +142,7 @@ int delete_pair(HashTable *ht, const char *key) {
             for(int i = 0; i < MAX_CLIENTS; i++) {
                 if (keyNode->subscribers_fds[i] != 0) {
                     char str[1 + MAX_STRING_SIZE + 1 + 8];
-                    snprintf(str, sizeof(str), "(%s,DELETED)", key);
+                    key_value_string_filling((const char*)key, "DELETED", strlen(key), strlen("DELETED"), str);
                     write(keyNode->subscribers_fds[i], str, sizeof(str));
                 }
             }

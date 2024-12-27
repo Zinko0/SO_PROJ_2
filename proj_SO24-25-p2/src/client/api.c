@@ -117,8 +117,8 @@ void *kvs_get_notification(void* arg) {
   // read from notification pipe
   char buffer[(MAX_STRING_SIZE+1)*2 + strlen("(,)") + 1];
   while (connected){
-    while(read_all(filedesc[3],buffer,sizeof(buffer)*sizeof(char),NULL) != 1){
-      printf("%s\n",buffer);
+    if (read_all(filedesc[3], buffer, sizeof(buffer), NULL) == 1) {
+      printf("%s\n", buffer);
     }
   }
   return NULL;

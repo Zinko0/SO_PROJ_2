@@ -5,5 +5,10 @@ SHOW
 BACKUP
 DELETE [c]
 READ [c]
-WAIT 1000
+WAIT 10000
+WRITE [(a,anna)(a,bernardo)(a,bernardina)]
+DELETE [a]
+WAIT 10000
+WRITE [(a,anna)(a,bernardo)(a,bernardina)]
+DELETE [a]
 SHOW
