@@ -8,7 +8,7 @@
 #include "src/common/io.h"
 #include "api.h"
 
-int connected;
+
 
 int filedesc[4];
 
@@ -55,7 +55,7 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   //Aguardar resposta do servidor
   char resp_buffer[4];
   while(read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL) != 1);
-  connected = 1;
+  
   printf("Server returned %c for operation: connect\n",resp_buffer[2]);
   return 0;
 }
@@ -66,13 +66,16 @@ int kvs_disconnect(void) {
   char buffer[2]; //OP_CODE_DISCONNECT
   sprintf(buffer, "%d", OP_CODE_DISCONNECT);
   if(write_all(filedesc[1],buffer, sizeof(buffer)) == -1){
+    //it means that a SIGUSR1 was sent to the server
+    if(errno == EPIPE){
+      terminate();
+    }
     return 1;
   }
   //-------------------------------------------
   //Aguardar resposta do servidor
   char resp_buffer[4];
   while(read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL) != 1);
-  connected = 0;
   for(int i = 0; i < 4; i++){
     if(close(filedesc[i]) == -1){
       return 1;
@@ -89,6 +92,10 @@ int kvs_subscribe(const char* key) {
   char buffer[1 + MAX_STRING_SIZE + 1 + 1]; //OP_CODE_SUBSCRIBE  
   sprintf(buffer, "%d %s", OP_CODE_SUBSCRIBE ,filled_key); //DUVIDA: SE faz com que as strings tenham sempre 40 caracteres
   if(write_all(filedesc[1],buffer, sizeof(buffer)) == -1){
+    //it means that a SIGUSR1 was sent to the server
+    if(errno == EPIPE){
+      terminate();   
+    }
     return 1;
   }
   char resp_buffer[4];
@@ -105,11 +112,15 @@ int kvs_unsubscribe(const char* key) {
   char buffer[1 + MAX_STRING_SIZE + 1 + 1]; //OP_CODE_SUBSCRIBE  
   sprintf(buffer, "%d %s", OP_CODE_UNSUBSCRIBE ,filled_key);
   if(write_all(filedesc[1],buffer, sizeof(buffer)) == -1){
+    //it means that a SIGUSR1 was sent to the server
+    if(errno == EPIPE){
+      terminate();
+    }
     return 1;
   }
   //response of type: "%c %c\n" -> OP_CODE_UNSUBSCRIBE, result
   char resp_buffer[4];
-  while(read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL) != 1 || get_code(buffer[0]) != OP_CODE_UNSUBSCRIBE);
+  while(read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL) != 1);
  
   printf("Server returned %c for operation: unsubscribe\n",resp_buffer[2]);
   return 0;
@@ -122,18 +133,26 @@ void *kvs_get_notification(void* arg) {
   char key[MAX_STRING_SIZE+1];
   char value[MAX_STRING_SIZE+1];
   int read_all_result;
-  while (connected){
-    //to make sure that the read_all only tries to read if the client is still connected
+  while (1){
+    
     read_all_result = read_all(filedesc[3], buffer, sizeof(buffer), NULL);
-    if (connected && read_all_result == 1) {
+    if (read_all_result == 1) {
       strncpy(key, buffer, MAX_STRING_SIZE+1);
       strncpy(value, buffer + MAX_STRING_SIZE+1, MAX_STRING_SIZE+1);
       printf("(%s,%s)\n", key,value);
     }
+    //it means that the client disconnected or that the server was terminated
     if (read_all_result == -1 && errno == EBADF) {
-      connected = 0;
       break;
     }
   }
   return NULL;
+}
+
+void terminate() {
+  for (size_t i = 0; i < 4; i++)
+  {
+    close(filedesc[i]);
+  }
+  return;
 }

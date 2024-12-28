@@ -10,7 +10,7 @@
 #include "src/common/constants.h"
 #include "src/common/io.h"
 
-int connected;
+
 
 int main(int argc, char* argv[]) {
   if (argc < 3) {
@@ -25,6 +25,7 @@ int main(int argc, char* argv[]) {
   char keys[MAX_NUMBER_SUB][MAX_STRING_SIZE] = {0};
   unsigned int delay_ms;
   size_t num;
+  int connected;
 
   strncat(req_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
   strncat(resp_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
@@ -34,40 +35,24 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "Failed to connect to the server\n");
     return 1;
   }
-
+  connected = 1;
   pthread_t notif_thread;
-  printf("Connected to server\n");
   pthread_create(&notif_thread, NULL, kvs_get_notification, NULL);
 
-  while (1) {
-    //in case of SIGUSR1
-    if (connected == 0) {
-      if (kvs_disconnect() != 0) {
-          fprintf(stderr, "Failed to disconnect to the server\n");
-          return 1;
-      }
-      pthread_join(notif_thread, NULL);
-      
-      printf("Disconnected from server\n");
-      return 0;
-    }
+  while (connected) {
     switch (get_next(STDIN_FILENO)) {
       case CMD_DISCONNECT:
         if (kvs_disconnect() != 0) {
           fprintf(stderr, "Failed to disconnect to the server\n");
+          pthread_join(notif_thread, NULL);
           return 1;
         }
         
         pthread_join(notif_thread, NULL);
-        // TODO: end notifications thread
         printf("Disconnected from server\n");
         return 0;
 
       case CMD_SUBSCRIBE:
-        if (connected == 0) {
-          fprintf(stderr, "Can't subscribe, server disconnected\n");
-          break;
-        }
         num = parse_list(STDIN_FILENO, keys, 1, MAX_STRING_SIZE);
         if (num == 0) {
           fprintf(stderr, "Invalid command. See HELP for usage\n");
@@ -76,15 +61,12 @@ int main(int argc, char* argv[]) {
          
         if (kvs_subscribe(keys[0])) {
             fprintf(stderr, "Command subscribe failed\n");
+            connected = 0;
         }
 
         break;
 
       case CMD_UNSUBSCRIBE:
-        if (connected == 0) {
-          fprintf(stderr, "Can't unsubscribe, server disconnected\n");
-          break;
-        }
         num = parse_list(STDIN_FILENO, keys, 1, MAX_STRING_SIZE);
         if (num == 0) {
           fprintf(stderr, "Invalid command. See HELP for usage\n");
@@ -93,15 +75,12 @@ int main(int argc, char* argv[]) {
          
         if (kvs_unsubscribe(keys[0])) {
             fprintf(stderr, "Command subscribe failed\n");
+            connected = 0;
         }
 
         break;
 
       case CMD_DELAY:
-        if (connected == 0) {
-          fprintf(stderr, "Can't delay, server disconnected\n");
-          break;
-        }
         if (parse_delay(STDIN_FILENO, &delay_ms) == -1) {
           fprintf(stderr, "Invalid command. See HELP for usage\n");
           continue;
@@ -125,4 +104,6 @@ int main(int argc, char* argv[]) {
         break;
     }
   }
+  pthread_join(notif_thread, NULL);
+  return 0;
 }

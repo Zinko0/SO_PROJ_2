@@ -4,7 +4,6 @@
 #include <stddef.h>
 #include "src/common/constants.h"
 
-int connected;
 
 /// Connects to a kvs server.
 /// @param req_pipe_path Path to the name pipe to be created for requests.
@@ -30,5 +29,7 @@ int kvs_subscribe(const char* key);
 int kvs_unsubscribe(const char* key);
 
 void *kvs_get_notification(void* arg);
+
+void terminate();
  
 #endif  // CLIENT_API_H
