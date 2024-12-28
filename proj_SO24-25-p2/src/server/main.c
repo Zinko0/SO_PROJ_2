@@ -75,9 +75,13 @@ void initialize_global_sigset() {
 }
 
 static void sigusr1_handler(int signo) {
-    if (signo == SIGUSR1) {
-        signal_received = 1;
-    }
+  if(signal(SIGTERM, sigusr1_handler) == SIG_ERR){
+    exit(EXIT_FAILURE);
+  }
+  if (signo == SIGUSR1) {
+    signal_received = 1;
+    exit(EXIT_SUCCESS);
+  }
 }
 
 int filter_job_files(const struct dirent* entry) {
@@ -331,7 +335,7 @@ static void *managing_clients(void* arguments) {
       pthread_mutex_lock(&semExMut);
 
       assing_pipe_data(buffer_data->buffer,write_index,buffer + 2);
-     
+
       write_index = (write_index + 1)% MAX_CLIENTS; 
       pthread_mutex_unlock(&semExMut);
 
@@ -377,7 +381,7 @@ static void *client_thread(void *arguments){
   strncpy(req_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].req_pipe_path,MAX_PIPE_PATH_LENGTH);
   strncpy(resp_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].resp_pipe_path,MAX_PIPE_PATH_LENGTH);
   strncpy(notif_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].notif_pipe_path,MAX_PIPE_PATH_LENGTH);
-        
+
   *(buffer_data->read_index) = (*(buffer_data->read_index) + 1) % MAX_CLIENTS;
 
   pthread_mutex_unlock(&semExMut);
@@ -395,12 +399,12 @@ static void *client_thread(void *arguments){
   write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
 
   pthread_mutex_lock(&lock);
-  
-  for(int i = 0; i < MAX_CLIENTS; i++){
-    if(buffer_data->active_clients[i].req_fd == 0){ 
-      buffer_data->active_clients[i].req_fd = req_pipe_fd;
-      buffer_data->active_clients[i].resp_fd = resp_pipe_fd;
-      buffer_data->active_clients[i].notif_fd = notif_pipe_fd;
+  int index;
+  for(index = 0; index < MAX_CLIENTS; index++){
+    if(buffer_data->active_clients[index].req_fd == 0){ 
+      buffer_data->active_clients[index].req_fd = req_pipe_fd;
+      buffer_data->active_clients[index].resp_fd = resp_pipe_fd;
+      buffer_data->active_clients[index].notif_fd = notif_pipe_fd;
       break;
     }
   }
@@ -453,7 +457,10 @@ static void *client_thread(void *arguments){
         case OP_CODE_DISCONNECT:
           
           result = disconnect(notif_pipe_fd);
-          //apagar o cliente da lista de clientes ativos usando o i 
+          buffer_data->active_clients[index].req_fd = 0;
+          buffer_data->active_clients[index].resp_fd = 0;
+          buffer_data->active_clients[index].notif_fd = 0;
+
           snprintf(resp_buffer, sizeof(resp_buffer), "%d %d", OP_CODE_DISCONNECT ,result);
           write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
           if(errno == EBADF){

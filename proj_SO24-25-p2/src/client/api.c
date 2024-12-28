@@ -54,7 +54,15 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   }
   //Aguardar resposta do servidor
   char resp_buffer[4];
-  while(read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL) != 1);
+  int read_result;
+  read_result = read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL);
+  if(read_result == -1){
+    return 1;
+  } else if (read_result == 0){
+    printf("terminated\n");
+    terminate();
+    return 1;
+  }
   
   printf("Server returned %c for operation: connect\n",resp_buffer[2]);
   return 0;
@@ -75,7 +83,15 @@ int kvs_disconnect(void) {
   //-------------------------------------------
   //Aguardar resposta do servidor
   char resp_buffer[4];
-  while(read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL) != 1);
+  int read_result;
+  read_result = read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL);
+  if(read_result == -1){
+    return 1;
+  } else if (read_result == 0){
+    printf("terminated\n");
+    terminate();
+    return 1;
+  }
   for(int i = 0; i < 4; i++){
     if(close(filedesc[i]) == -1){
       return 1;
@@ -99,8 +115,16 @@ int kvs_subscribe(const char* key) {
     return 1;
   }
   char resp_buffer[4];
-  while(read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL) != 1);
-  
+
+  int read_result;
+  read_result = read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL);
+  if(read_result == -1){
+    return 1;
+  } else if (read_result == 0){
+    printf("terminated\n");
+    terminate();
+    return 1;
+  }
   printf("Server returned %c for operation: subscribe\n",resp_buffer[2]);
   return 0;
 }
@@ -120,7 +144,16 @@ int kvs_unsubscribe(const char* key) {
   }
   //response of type: "%c %c\n" -> OP_CODE_UNSUBSCRIBE, result
   char resp_buffer[4];
-  while(read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL) != 1);
+  int read_result;
+  read_result = read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL);
+  if(read_result == -1){
+    return 1;
+  } else if (read_result == 0){
+    printf("terminated\n");
+    terminate();
+    return 1;
+  }
+  
  
   printf("Server returned %c for operation: unsubscribe\n",resp_buffer[2]);
   return 0;
@@ -142,7 +175,7 @@ void *kvs_get_notification(void* arg) {
       printf("(%s,%s)\n", key,value);
     }
     //it means that the client disconnected or that the server was terminated
-    if (read_all_result == -1 && errno == EBADF) {
+    if ((read_all_result == -1 && errno == EBADF )|| read_all_result == 0){ 
       break;
     }
   }
