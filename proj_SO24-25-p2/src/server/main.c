@@ -370,10 +370,10 @@ static void *client_thread(void *arguments){
   char key[MAX_STRING_SIZE + 1]; //key + \0
   char resp_buffer[4]; //OP_CODE + space + result + \0
   int result = 0;//it starts at 0 because of the connect
-  int disconnect_flag = 0;
+  int disconnect_flag;
   while(1){
   //readMsg function ---------------------------
-
+  disconnect_flag = 0;
   sem_wait(&empty_buffer);
   
   pthread_mutex_lock(&semExMut);

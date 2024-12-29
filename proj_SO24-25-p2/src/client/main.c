@@ -37,7 +37,7 @@ int main(int argc, char* argv[]) {
   }
   connected = 1;
   pthread_t notif_thread;
-  pthread_create(&notif_thread, NULL, kvs_get_notification, NULL);
+  pthread_create(&notif_thread, NULL, kvs_get_notification, &connected);
 
   while (connected) {
     switch (get_next(STDIN_FILENO)) {

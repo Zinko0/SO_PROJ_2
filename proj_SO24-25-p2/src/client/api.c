@@ -160,24 +160,21 @@ int kvs_unsubscribe(const char* key) {
 }
 
 void *kvs_get_notification(void* arg) {
-  (void)arg;//to avoid unused parameter warning----------------------------------------------------
+  int *connected = (int*) arg;
   // read from notification pipe
   char buffer[(MAX_STRING_SIZE+1)*2];
   char key[MAX_STRING_SIZE+1];
   char value[MAX_STRING_SIZE+1];
-  int read_all_result;
-  while (1){
-    
-    read_all_result = read_all(filedesc[3], buffer, sizeof(buffer), NULL);
-    if (read_all_result == 1) {
-      strncpy(key, buffer, MAX_STRING_SIZE+1);
-      strncpy(value, buffer + MAX_STRING_SIZE+1, MAX_STRING_SIZE+1);
-      printf("(%s,%s)\n", key,value);
-    }
-    //it means that the client disconnected or that the server was terminated
-    if ((read_all_result == -1 && errno == EBADF )|| read_all_result == 0){ 
-      break;
-    }
+
+  //we only want to read from the pipe while the client is connected
+  //if the client disconnects(filedas[3] closes), the *connected condition prevents any more read_all calls
+  //if the server terminates, the read_all will return 0 and the client will terminate
+  while (*connected && (read_all(filedesc[3], buffer, sizeof(buffer), NULL) == 1)) {
+
+    strncpy(key, buffer, MAX_STRING_SIZE+1);
+    strncpy(value, buffer + MAX_STRING_SIZE+1, MAX_STRING_SIZE+1);
+    printf("(%s,%s)\n", key,value);
+
   }
   return NULL;
 }

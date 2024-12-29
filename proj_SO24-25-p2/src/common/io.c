@@ -30,9 +30,7 @@ int read_all(int fd, void *buffer, size_t size, int *intr) {
         }
         continue;
       }
-      if(errno != EBADF){
-        perror("Failed to read from pipe");
-      }
+      perror("Failed to read from pipe");
       return -1;
     } else if (result == 0) {
       return 0;
