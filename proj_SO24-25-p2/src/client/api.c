@@ -19,14 +19,18 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   filedesc[0] = open(server_pipe_path,O_WRONLY);
   //------------------------------------------
   
-  char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3 + 1];
-  char filled_req_pipe[MAX_PIPE_PATH_LENGTH];
-  char filled_resp_pipe[MAX_PIPE_PATH_LENGTH];
+  char buffer[1 + MAX_PIPE_PATH_LENGTH * 3];
+  char filled_req_pipe[MAX_PIPE_PATH_LENGTH +1];
+  char filled_resp_pipe[MAX_PIPE_PATH_LENGTH +1];
   char filled_notif_pipe[MAX_PIPE_PATH_LENGTH];
   pipe_string_filling(req_pipe_path,strlen(req_pipe_path),filled_req_pipe);
   pipe_string_filling(resp_pipe_path,strlen(resp_pipe_path),filled_resp_pipe);
   pipe_string_filling(notif_pipe_path,strlen(notif_pipe_path),filled_notif_pipe);
-  snprintf(buffer, sizeof(buffer), "%d %s %s %s", OP_CODE_CONNECT,filled_req_pipe, filled_resp_pipe, filled_notif_pipe);
+
+  buffer[0] = get_code_string(OP_CODE_CONNECT);
+  strncpy(buffer + 1,filled_req_pipe,(MAX_PIPE_PATH_LENGTH) * sizeof(char));
+  strncpy(buffer + 1 + MAX_PIPE_PATH_LENGTH,filled_resp_pipe,(MAX_PIPE_PATH_LENGTH) * sizeof(char));
+  strncpy(buffer + 1 + (2 * MAX_PIPE_PATH_LENGTH),filled_notif_pipe,(MAX_PIPE_PATH_LENGTH) * sizeof(char));
 
   
   if(write_all(filedesc[0], buffer, sizeof(buffer)) == -1){
@@ -34,14 +38,14 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   }
  //------------------------------------------
  
-  if(create_pipe(req_pipe_path) == -1){
+  if(create_pipe(filled_req_pipe) == -1){
     return 1;
   }
-  if(create_pipe(resp_pipe_path) == -1){
+  if(create_pipe(filled_resp_pipe) == -1){
     return 1;
   }
 
-  if(create_pipe(notif_pipe_path) == -1){
+  if(create_pipe(filled_notif_pipe) == -1){
     return 1;
   }
   filedesc[1] = open(filled_req_pipe,O_WRONLY);
@@ -53,7 +57,7 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
     }
   }
   //Aguardar resposta do servidor
-  char resp_buffer[4];
+  char resp_buffer[2];
   int read_result;
   read_result = read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL);
   if(read_result == -1){
@@ -64,15 +68,15 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
     return 1;
   }
   
-  printf("Server returned %c for operation: connect\n",resp_buffer[2]);
+  printf("Server returned %c for operation: connect\n",resp_buffer[1]);
   return 0;
 }
  
 int kvs_disconnect(void) {
   // close pipes 
   //-------------------------------------------
-  char buffer[2]; //OP_CODE_DISCONNECT
-  sprintf(buffer, "%d", OP_CODE_DISCONNECT);
+  char buffer[1]; //OP_CODE_DISCONNECT
+  buffer[0] = get_code_string(OP_CODE_DISCONNECT);
   if(write_all(filedesc[1],buffer, sizeof(buffer)) == -1){
     //it means that a SIGUSR1 was sent to the server
     if(errno == EPIPE){
@@ -82,7 +86,7 @@ int kvs_disconnect(void) {
   }
   //-------------------------------------------
   //Aguardar resposta do servidor
-  char resp_buffer[4];
+  char resp_buffer[2];
   int read_result;
   read_result = read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL);
   if(read_result == -1){
@@ -97,16 +101,18 @@ int kvs_disconnect(void) {
       return 1;
     }
   }
-  printf("Server returned %c for operation: disconnect\n",resp_buffer[2]);
+  printf("Server returned %c for operation: disconnect\n",resp_buffer[1]);
   return 0;
 }
 
 int kvs_subscribe(const char* key) {
   // send subscribe message to request pipe and wait for response in response pipe
-  char filled_key[MAX_STRING_SIZE];
+  char filled_key[MAX_STRING_SIZE + 1]; //key + \0
   key_string_filling(key,strlen(key),filled_key);
-  char buffer[1 + MAX_STRING_SIZE + 1 + 1]; //OP_CODE_SUBSCRIBE  
-  sprintf(buffer, "%d %s", OP_CODE_SUBSCRIBE ,filled_key); //DUVIDA: SE faz com que as strings tenham sempre 40 caracteres
+  char buffer[1 + MAX_STRING_SIZE + 1];
+  buffer[0] = get_code_string(OP_CODE_SUBSCRIBE);
+  strncpy(buffer + 1, filled_key, (MAX_STRING_SIZE + 1)* sizeof(char));
+
   if(write_all(filedesc[1],buffer, sizeof(buffer)) == -1){
     //it means that a SIGUSR1 was sent to the server
     if(errno == EPIPE){
@@ -114,7 +120,7 @@ int kvs_subscribe(const char* key) {
     }
     return 1;
   }
-  char resp_buffer[4];
+  char resp_buffer[2];
 
   int read_result;
   read_result = read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL);
@@ -125,16 +131,18 @@ int kvs_subscribe(const char* key) {
     terminate();
     return 1;
   }
-  printf("Server returned %c for operation: subscribe\n",resp_buffer[2]);
+  printf("Server returned %c for operation: subscribe\n",resp_buffer[1]);
   return 0;
 }
 
 int kvs_unsubscribe(const char* key) {
   // send unsubscribe message to request pipe and wait for response in response pipe
-  char filled_key[MAX_STRING_SIZE];
+  char filled_key[MAX_STRING_SIZE + 1]; //key + \0
   key_string_filling(key,strlen(key),filled_key);
-  char buffer[1 + MAX_STRING_SIZE + 1 + 1]; //OP_CODE_SUBSCRIBE  
-  sprintf(buffer, "%d %s", OP_CODE_UNSUBSCRIBE ,filled_key);
+  char buffer[1 + MAX_STRING_SIZE + 1];
+  buffer[0] = get_code_string(OP_CODE_UNSUBSCRIBE);
+  strncpy(buffer + 1, filled_key,(MAX_STRING_SIZE + 1)* sizeof(char));
+
   if(write_all(filedesc[1],buffer, sizeof(buffer)) == -1){
     //it means that a SIGUSR1 was sent to the server
     if(errno == EPIPE){
@@ -143,7 +151,7 @@ int kvs_unsubscribe(const char* key) {
     return 1;
   }
   //response of type: "%c %c\n" -> OP_CODE_UNSUBSCRIBE, result
-  char resp_buffer[4];
+  char resp_buffer[2];
   int read_result;
   read_result = read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL);
   if(read_result == -1){
@@ -155,7 +163,7 @@ int kvs_unsubscribe(const char* key) {
   }
   
  
-  printf("Server returned %c for operation: unsubscribe\n",resp_buffer[2]);
+  printf("Server returned %c for operation: unsubscribe\n",resp_buffer[1]);
   return 0;
 }
 

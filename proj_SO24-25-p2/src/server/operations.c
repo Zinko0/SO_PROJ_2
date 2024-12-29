@@ -180,41 +180,41 @@ void kvs_wait(unsigned int delay_ms) {
   nanosleep(&delay, NULL);
 }
 
-int subscribe(char *key, int fd) {
+char subscribe(char *key, int fd) {
   if (kvs_table == NULL) {
     fprintf(stderr, "KVS state must be initialized\n");
-    return 1;
+    return '1';
   }
   
   pthread_rwlock_wrlock(&kvs_table->tablelock);
 
   if (write_subscription(kvs_table, key, fd) != 0) {
     pthread_rwlock_unlock(&kvs_table->tablelock);
-    return 0;
+    return '0';
   }
   
     pthread_rwlock_unlock(&kvs_table->tablelock);
-  return 1;
+  return '1';
 }
 
-int unsubscribe(char *key, int fd) {
+char unsubscribe(char *key, int fd) {
   if (kvs_table == NULL) {
     fprintf(stderr, "KVS state must be initialized\n");
-    return 1;
+    return '1';
   }
   
   pthread_rwlock_wrlock(&kvs_table->tablelock);
 
   if (delete_subscription(kvs_table, key, fd) != 0) {
     pthread_rwlock_unlock(&kvs_table->tablelock);
-    return 1;
+    return '1';
   }
   
   pthread_rwlock_unlock(&kvs_table->tablelock);
-  return 0;
+  return '0';
 }
 
-int disconnect(int fd) {
+char disconnect(int fd) {
   //percorrer a lista de keys e dar delete_subscription
   KeyNode *keyNode;
   //temos de dar lock à tabela toda (podemos depois usar a tática do show que vai libertar os locks a cada iteração)
@@ -234,7 +234,7 @@ int disconnect(int fd) {
 
   pthread_rwlock_unlock(&kvs_table->tablelock);
   
-  return 0;
+  return '0';
 }
 
 int disconnect_all() {

@@ -293,12 +293,11 @@ static void* get_file(void* arguments) {
 }
 
 void assing_pipe_data(struct PipeData* buffer,size_t index,char* pipes_path){
-  char* req_pipe_path = strtok(pipes_path," ");
-  char* resp_pipe_path = strtok(NULL," ");
-  char* notif_pipe_path = strtok(NULL,""); //está com um char a mais por alguma razao
-  strncpy(buffer[index].req_pipe_path,req_pipe_path,MAX_PIPE_PATH_LENGTH);
-  strncpy(buffer[index].resp_pipe_path,resp_pipe_path,MAX_PIPE_PATH_LENGTH);
-  strncpy(buffer[index].notif_pipe_path,notif_pipe_path,MAX_PIPE_PATH_LENGTH);
+//está com um char a mais por alguma razao
+
+  strncpy(buffer[index].req_pipe_path,pipes_path,MAX_PIPE_PATH_LENGTH);
+  strncpy(buffer[index].resp_pipe_path,pipes_path + MAX_PIPE_PATH_LENGTH,MAX_PIPE_PATH_LENGTH);
+  strncpy(buffer[index].notif_pipe_path,pipes_path + (2*MAX_PIPE_PATH_LENGTH),MAX_PIPE_PATH_LENGTH);
   return;
 }
 
@@ -317,7 +316,7 @@ void close_all_clients(struct ActiveClients* active_clients){
 
 static void *managing_clients(void* arguments) {
   struct ManagingClients* buffer_data = (struct ManagingClients*) arguments;
-  char buffer[1 + MAX_PIPE_PATH_LENGTH * 3 + 3 + 1]; //OP_CODE + 3 pipe paths + 3 spaces + \0
+  char buffer[1 + MAX_PIPE_PATH_LENGTH * 3]; //OP_CODE + 3 pipe paths
   size_t write_index = 0;
   //Handle SIGUSR1
   if (signal(SIGUSR1, sigusr1_handler) == SIG_ERR) {
@@ -334,7 +333,7 @@ static void *managing_clients(void* arguments) {
 
       pthread_mutex_lock(&semExMut);
 
-      assing_pipe_data(buffer_data->buffer,write_index,buffer + 2);
+      assing_pipe_data(buffer_data->buffer,write_index,buffer + 1);
 
       write_index = (write_index + 1)% MAX_CLIENTS; 
       pthread_mutex_unlock(&semExMut);
@@ -366,10 +365,10 @@ static void *client_thread(void *arguments){
   int resp_pipe_fd;
   int notif_pipe_fd;
 
-  char op_buffer[2]; //OP_CODE + space
+  char op_buffer[1]; //OP_CODE + space
   char key[MAX_STRING_SIZE + 1]; //key + \0
-  char resp_buffer[4]; //OP_CODE + space + result + \0
-  int result = 0;//it starts at 0 because of the connect
+  char resp_buffer[2]; //OP_CODE + space + result + \0
+  char result = '0';//it starts at 0 because of the connect
   int disconnect_flag;
   while(1){
   //readMsg function ---------------------------
@@ -391,11 +390,14 @@ static void *client_thread(void *arguments){
   //--------------------------------------------
   
   //------Connecting function--------------------------
+
   req_pipe_fd = open(req_pipe_path, O_RDONLY);
   resp_pipe_fd = open(resp_pipe_path, O_WRONLY);
   notif_pipe_fd = open(notif_pipe_path, O_WRONLY); //falta testar se os opens correram bem
   
-  snprintf(resp_buffer,sizeof(resp_buffer),"%d %d",OP_CODE_CONNECT, result);
+  
+  resp_buffer[0] = get_code_string(OP_CODE_CONNECT);
+  resp_buffer[1] = result; 
   write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
 
   pthread_mutex_lock(&lock);
@@ -433,7 +435,8 @@ static void *client_thread(void *arguments){
             break;
           }
           result = subscribe(key, notif_pipe_fd);
-          snprintf(resp_buffer, sizeof(resp_buffer),"%d %d", OP_CODE_SUBSCRIBE ,result);
+          resp_buffer[0] = get_code_string(OP_CODE_SUBSCRIBE);
+          resp_buffer[1] = result;
           write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
           if(errno == EBADF){
             disconnect_flag = 1;
@@ -447,7 +450,8 @@ static void *client_thread(void *arguments){
             break;
           }
           result = unsubscribe(key, notif_pipe_fd);
-          snprintf(resp_buffer, sizeof(resp_buffer), "%d %d", OP_CODE_UNSUBSCRIBE ,result);
+          resp_buffer[0] = get_code_string(OP_CODE_UNSUBSCRIBE);
+          resp_buffer[1] = result;
           write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
           if(errno == EBADF){
             disconnect_flag = 1;
@@ -457,11 +461,14 @@ static void *client_thread(void *arguments){
         case OP_CODE_DISCONNECT:
           
           result = disconnect(notif_pipe_fd);
+
           buffer_data->active_clients[index].req_fd = 0;
           buffer_data->active_clients[index].resp_fd = 0;
           buffer_data->active_clients[index].notif_fd = 0;
 
-          snprintf(resp_buffer, sizeof(resp_buffer), "%d %d", OP_CODE_DISCONNECT ,result);
+          resp_buffer[0] = get_code_string(OP_CODE_DISCONNECT);
+          resp_buffer[1] = result;
+
           write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
           if(errno == EBADF){
             disconnect_flag = 1;

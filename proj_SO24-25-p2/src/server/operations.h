@@ -63,18 +63,18 @@ int get_n_current_backups();
 /// Subscribes a client to a key.
 /// @param key key that the client wants to subscribe.
 /// @return 1 if the client was subscribed successfully, 0 otherwise.
-int subscribe(char *key, int fd);
+char subscribe(char *key, int fd);
 
 
 /// Unsubscribes a client from a key.
 /// @param key key that the client wants to unsubscribe.
 /// @return 0 if the client was unsubscribed successfully, 1 otherwise.
-int unsubscribe(char *key, int fd);
+char unsubscribe(char *key, int fd);
 
 /// Disconnects a client from the server.
 /// @param fd File descriptor of the client.
 /// @return 0 if the client was disconnected successfully, 1 otherwise.
-int disconnect(int fd);
+char disconnect(int fd);
 
 int disconnect_all();
 

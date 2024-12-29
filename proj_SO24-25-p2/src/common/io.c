@@ -111,6 +111,23 @@ enum Code get_code(char code) {
   }
 }
 
+char get_code_string(enum Code code) {
+  switch (code) {
+    case OP_CODE_CONNECT:
+      return '1';
+    case OP_CODE_DISCONNECT:
+      return '2';
+    case OP_CODE_SUBSCRIBE:
+      return '3';
+    case OP_CODE_UNSUBSCRIBE:
+      return '4';
+    case OP_CODE_INVALID:
+      return '5';
+    default:
+      return '5';
+  }
+}
+
 void pipe_string_filling(const char* str, size_t length, char* aux) {
   strcpy(aux, str);
   for(size_t i = length; i < MAX_STRING_SIZE; i++){
