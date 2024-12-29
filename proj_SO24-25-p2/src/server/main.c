@@ -43,7 +43,7 @@ struct ActiveClients {
 struct ManagingClients {
   //the buffer can have whatever size. 
   struct PipeData buffer[MAX_CLIENTS];
-  int *read_index;
+  size_t *read_index;
   int fifo_fd;
 
   struct ActiveClients active_clients[MAX_CLIENTS];
@@ -340,7 +340,13 @@ static void *managing_clients(void* arguments) {
 
       sem_post(&empty_buffer);
     }
-      
+    printf("MANAGER POV:\n");
+    for(int i = 0; i < MAX_CLIENTS; i++){
+      printf("index: %d ",i);
+      printf("req_fd: %s ",buffer_data->buffer[i].req_pipe_path);
+      printf("resp_fd: %s ",buffer_data->buffer[i].resp_pipe_path);
+      printf("notif_fd: %s\n",buffer_data->buffer[i].notif_pipe_path);
+    }
     if(signal_received == 1){
       close_all_clients(buffer_data->active_clients);
       //disconnect all is not async signal safe, so we need to call it here
@@ -381,6 +387,14 @@ static void *client_thread(void *arguments){
   strncpy(resp_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].resp_pipe_path,MAX_PIPE_PATH_LENGTH);
   strncpy(notif_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].notif_pipe_path,MAX_PIPE_PATH_LENGTH);
 
+  printf("CLIENT POV:\n");
+  for(int i = 0; i < MAX_CLIENTS; i++){
+      printf("index: %d ",i);
+      printf("req_fd: %s ",buffer_data->buffer[i].req_pipe_path);
+      printf("resp_fd: %s ",buffer_data->buffer[i].resp_pipe_path);
+      printf("notif_fd: %s\n",buffer_data->buffer[i].notif_pipe_path);
+  }
+  printf("index: %ld \n",*(buffer_data->read_index));
   *(buffer_data->read_index) = (*(buffer_data->read_index) + 1) % MAX_CLIENTS;
 
   pthread_mutex_unlock(&semExMut);
@@ -391,16 +405,17 @@ static void *client_thread(void *arguments){
   
   //------Connecting function--------------------------
 
+  pthread_mutex_lock(&lock);
+
   req_pipe_fd = open(req_pipe_path, O_RDONLY);
   resp_pipe_fd = open(resp_pipe_path, O_WRONLY);
   notif_pipe_fd = open(notif_pipe_path, O_WRONLY); //falta testar se os opens correram bem
-  
   
   resp_buffer[0] = get_code_string(OP_CODE_CONNECT);
   resp_buffer[1] = result; 
   write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
 
-  pthread_mutex_lock(&lock);
+  
   int index;
   for(index = 0; index < MAX_CLIENTS; index++){
     if(buffer_data->active_clients[index].req_fd == 0){ 
@@ -422,38 +437,35 @@ static void *client_thread(void *arguments){
         }
       }
       //if a SIGUSR1 was sent to the server we break the loop
-      if(disconnect_flag){
-        break;
-      }
+
       enum Code op_code = get_code(op_buffer[0]);
       switch (op_code){
         case OP_CODE_SUBSCRIBE:
           //if read_all fails beacuse of no file descriptor it needs to break the loop
-          read_all(req_pipe_fd,key,sizeof(key),NULL);
-          if (errno == EBADF){
+          if(read_all(req_pipe_fd,key,sizeof(key),NULL) == -1 && errno == EBADF){
             disconnect_flag = 1;
             break;
-          }
+          };
+          
           result = subscribe(key, notif_pipe_fd);
           resp_buffer[0] = get_code_string(OP_CODE_SUBSCRIBE);
           resp_buffer[1] = result;
-          write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
-          if(errno == EBADF){
+          //fazer condição para quando o errno nao é EBADF
+          if(write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer)) == -1 && errno == EBADF){
             disconnect_flag = 1;
           }
           break;
 
+
         case OP_CODE_UNSUBSCRIBE:
-          read_all(req_pipe_fd,key,sizeof(key),NULL);
-          if (errno == EBADF){
+          if(read_all(req_pipe_fd,key,sizeof(key),NULL) == -1 && errno == EBADF){
             disconnect_flag = 1;
             break;
-          }
+          };
           result = unsubscribe(key, notif_pipe_fd);
           resp_buffer[0] = get_code_string(OP_CODE_UNSUBSCRIBE);
           resp_buffer[1] = result;
-          write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
-          if(errno == EBADF){
+          if(write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer)) == -1 && errno == EBADF){
             disconnect_flag = 1;
           }
           break;
@@ -469,11 +481,10 @@ static void *client_thread(void *arguments){
           resp_buffer[0] = get_code_string(OP_CODE_DISCONNECT);
           resp_buffer[1] = result;
 
-          write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
-          if(errno == EBADF){
+          if(write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer)) == -1 && errno == EBADF){
             disconnect_flag = 1;
-            break;
           }
+          break;
           close(req_pipe_fd);
           close(notif_pipe_fd);
           close(resp_pipe_fd);
@@ -596,7 +607,7 @@ int requests_buffer_init(struct ManagingClients* buffer,char* fifo_name) {
   }
 
   buffer->fifo_fd = fifo_fd;
-  buffer->read_index = malloc(sizeof(int)); //MALOC TEMOS DE DAR FREE
+  buffer->read_index = malloc(sizeof(size_t)); //MALOC TEMOS DE DAR FREE
   *(buffer->read_index)= 0;
   return 0;
 }

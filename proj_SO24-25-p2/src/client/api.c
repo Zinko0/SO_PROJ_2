@@ -63,7 +63,6 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   if(read_result == -1){
     return 1;
   } else if (read_result == 0){
-    printf("terminated\n");
     terminate();
     return 1;
   }
@@ -92,7 +91,7 @@ int kvs_disconnect(void) {
   if(read_result == -1){
     return 1;
   } else if (read_result == 0){
-    printf("terminated\n");
+
     terminate();
     return 1;
   }
@@ -115,22 +114,16 @@ int kvs_subscribe(const char* key) {
 
   if(write_all(filedesc[1],buffer, sizeof(buffer)) == -1){
     //it means that a SIGUSR1 was sent to the server
-    if(errno == EPIPE){
-      terminate();   
-    }
+    terminate();   
     return 1;
   }
   char resp_buffer[2];
 
-  int read_result;
-  read_result = read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL);
-  if(read_result == -1){
-    return 1;
-  } else if (read_result == 0){
-    printf("terminated\n");
+  if(read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL) != 1){
     terminate();
     return 1;
   }
+
   printf("Server returned %c for operation: subscribe\n",resp_buffer[1]);
   return 0;
 }
@@ -145,23 +138,16 @@ int kvs_unsubscribe(const char* key) {
 
   if(write_all(filedesc[1],buffer, sizeof(buffer)) == -1){
     //it means that a SIGUSR1 was sent to the server
-    if(errno == EPIPE){
-      terminate();
-    }
+    terminate();
     return 1;
   }
   //response of type: "%c %c\n" -> OP_CODE_UNSUBSCRIBE, result
   char resp_buffer[2];
-  int read_result;
-  read_result = read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL);
-  if(read_result == -1){
-    return 1;
-  } else if (read_result == 0){
-    printf("terminated\n");
+
+  if(read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL) != 1){
     terminate();
     return 1;
   }
-  
  
   printf("Server returned %c for operation: unsubscribe\n",resp_buffer[1]);
   return 0;
