@@ -86,13 +86,10 @@ int kvs_disconnect(void) {
   //-------------------------------------------
   //Aguardar resposta do servidor
   char resp_buffer[2];
-  int read_result;
-  read_result = read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL);
-  if(read_result == -1){
-    return 1;
-  } else if (read_result == 0){
-
-    terminate();
+  if(read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL) != 1){
+    if (errno == EPIPE){
+      terminate();
+    }
     return 1;
   }
   for(int i = 0; i < 4; i++){
@@ -113,14 +110,18 @@ int kvs_subscribe(const char* key) {
   strncpy(buffer + 1, filled_key, (MAX_STRING_SIZE + 1)* sizeof(char));
 
   if(write_all(filedesc[1],buffer, sizeof(buffer)) == -1){
+    if (errno == EPIPE){
+      terminate();
+    }
     //it means that a SIGUSR1 was sent to the server
-    terminate();   
     return 1;
   }
   char resp_buffer[2];
 
   if(read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL) != 1){
-    terminate();
+    if (errno == EPIPE){
+      terminate();
+    }
     return 1;
   }
 
@@ -137,15 +138,18 @@ int kvs_unsubscribe(const char* key) {
   strncpy(buffer + 1, filled_key,(MAX_STRING_SIZE + 1)* sizeof(char));
 
   if(write_all(filedesc[1],buffer, sizeof(buffer)) == -1){
-    //it means that a SIGUSR1 was sent to the server
-    terminate();
+    if (errno == EPIPE){
+      terminate();
+    }
     return 1;
   }
   //response of type: "%c %c\n" -> OP_CODE_UNSUBSCRIBE, result
   char resp_buffer[2];
 
   if(read_all(filedesc[2],resp_buffer,sizeof(resp_buffer),NULL) != 1){
-    terminate();
+    if (errno == EPIPE){
+      terminate();
+    }
     return 1;
   }
  
@@ -163,8 +167,14 @@ void *kvs_get_notification(void* arg) {
   //we only want to read from the pipe while the client is connected
   //if the client disconnects(filedas[3] closes), the *connected condition prevents any more read_all calls
   //if the server terminates, the read_all will return 0 and the client will terminate
-  while (*connected && (read_all(filedesc[3], buffer, sizeof(buffer), NULL) == 1)) {
-
+  while (*connected) {
+    if(read_all(filedesc[3],buffer,sizeof(buffer),NULL) != 1){
+      if (errno == EPIPE){
+        terminate();
+        break;
+      }
+      continue;
+    }
     strncpy(key, buffer, MAX_STRING_SIZE+1);
     strncpy(value, buffer + MAX_STRING_SIZE+1, MAX_STRING_SIZE+1);
     printf("(%s,%s)\n", key,value);

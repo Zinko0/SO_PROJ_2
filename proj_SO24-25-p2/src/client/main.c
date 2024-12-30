@@ -44,10 +44,12 @@ int main(int argc, char* argv[]) {
       case CMD_DISCONNECT:
         if (kvs_disconnect() != 0) {
           fprintf(stderr, "Failed to disconnect to the server\n");
+          connected = 0;
           pthread_join(notif_thread, NULL);
           return 1;
         }
         
+        connected = 0;
         pthread_join(notif_thread, NULL);
         printf("Disconnected from server\n");
         return 0;

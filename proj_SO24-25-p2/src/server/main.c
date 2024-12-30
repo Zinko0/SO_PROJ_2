@@ -36,8 +36,11 @@ struct PipeData {
 
 struct ActiveClients {
   int req_fd;
+  char* req_pipe_path;
   int resp_fd;
+  char* resp_pipe_path;
   int notif_fd;
+  char* notif_pipe_path;
 };
 
 struct ManagingClients {
@@ -305,8 +308,11 @@ void close_all_clients(struct ActiveClients* active_clients){
   for(int i = 0; i < MAX_CLIENTS; i++){
     if(active_clients[i].req_fd != 0){
       close(active_clients[i].req_fd);
+      unlink(active_clients[i].req_pipe_path);
       close(active_clients[i].resp_fd);
+      unlink(active_clients[i].resp_pipe_path);
       close(active_clients[i].notif_fd);
+      unlink(active_clients[i].notif_pipe_path);
       active_clients[i].req_fd = 0;
       active_clients[i].resp_fd = 0;
       active_clients[i].notif_fd = 0;
@@ -420,8 +426,11 @@ static void *client_thread(void *arguments){
   for(index = 0; index < MAX_CLIENTS; index++){
     if(buffer_data->active_clients[index].req_fd == 0){ 
       buffer_data->active_clients[index].req_fd = req_pipe_fd;
+      buffer_data->active_clients[index].req_pipe_path = req_pipe_path;
       buffer_data->active_clients[index].resp_fd = resp_pipe_fd;
+      buffer_data->active_clients[index].resp_pipe_path = resp_pipe_path;
       buffer_data->active_clients[index].notif_fd = notif_pipe_fd;
+      buffer_data->active_clients[index].notif_pipe_path = notif_pipe_path;
       break;
     }
   }
@@ -486,8 +495,11 @@ static void *client_thread(void *arguments){
           }
           break;
           close(req_pipe_fd);
+          unlink(req_pipe_path);
           close(notif_pipe_fd);
+          unlink(notif_pipe_path);
           close(resp_pipe_fd);
+          unlink(resp_pipe_path);
           //go back to the main loop
           disconnect_flag = 1;
           break;
