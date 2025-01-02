@@ -106,6 +106,11 @@ int main(int argc, char* argv[]) {
         break;
     }
   }
+  terminate();
+  unlink(req_pipe_path);
+  unlink(resp_pipe_path);
+  unlink(notif_pipe_path);
+  
   pthread_join(notif_thread, NULL);
   return 0;
 }

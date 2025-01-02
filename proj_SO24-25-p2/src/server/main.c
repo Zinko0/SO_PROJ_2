@@ -48,11 +48,10 @@ struct ManagingClients {
   struct PipeData buffer[MAX_CLIENTS];
   size_t *read_index;
   int fifo_fd;
-
-  struct ActiveClients active_clients[MAX_CLIENTS];
 };
 
 
+struct ActiveClients active_clients[MAX_CLIENTS];
 
 sigset_t set_with_sigusr1;
 int signal_received = 0;
@@ -77,14 +76,31 @@ void initialize_global_sigset() {
     sigaddset(&set_with_sigusr1, SIGUSR1);
 }
 
+void close_all_clients(){
+  for(int i = 0; i < MAX_CLIENTS; i++){
+    if(active_clients[i].req_fd != 0){
+      close(active_clients[i].req_fd);
+      unlink(active_clients[i].req_pipe_path);
+      close(active_clients[i].resp_fd);
+      unlink(active_clients[i].resp_pipe_path);
+      close(active_clients[i].notif_fd);
+      unlink(active_clients[i].notif_pipe_path);
+      active_clients[i].req_fd = 0;
+      active_clients[i].resp_fd = 0;
+      active_clients[i].notif_fd = 0;
+    }
+  }
+}
+
 static void sigusr1_handler(int signo) {
   if(signal(SIGTERM, sigusr1_handler) == SIG_ERR){
     exit(EXIT_FAILURE);
   }
   if (signo == SIGUSR1) {
+    close_all_clients();
     signal_received = 1;
-    exit(EXIT_SUCCESS);
   }
+  return;
 }
 
 int filter_job_files(const struct dirent* entry) {
@@ -304,21 +320,6 @@ void assing_pipe_data(struct PipeData* buffer,size_t index,char* pipes_path){
   return;
 }
 
-void close_all_clients(struct ActiveClients* active_clients){
-  for(int i = 0; i < MAX_CLIENTS; i++){
-    if(active_clients[i].req_fd != 0){
-      close(active_clients[i].req_fd);
-      unlink(active_clients[i].req_pipe_path);
-      close(active_clients[i].resp_fd);
-      unlink(active_clients[i].resp_pipe_path);
-      close(active_clients[i].notif_fd);
-      unlink(active_clients[i].notif_pipe_path);
-      active_clients[i].req_fd = 0;
-      active_clients[i].resp_fd = 0;
-      active_clients[i].notif_fd = 0;
-    }
-  }
-}
 
 static void *managing_clients(void* arguments) {
   struct ManagingClients* buffer_data = (struct ManagingClients*) arguments;
@@ -333,6 +334,12 @@ static void *managing_clients(void* arguments) {
   //Is allways reading from the FIFO waiting for a client to connect
   while (1){
     while(read_all(buffer_data->fifo_fd, buffer, sizeof(buffer), NULL) != 1); 
+
+    if(signal_received == 1){
+      //disconnect all is not async signal safe, so we need to call it here
+      disconnect_all();
+      break;
+    }
 
     if(get_code(buffer[0]) == OP_CODE_CONNECT){
       sem_wait(&full_buffer);
@@ -353,12 +360,7 @@ static void *managing_clients(void* arguments) {
       sem_post(&empty_buffer);
     }
 
-    if(signal_received == 1){
-      close_all_clients(buffer_data->active_clients);
-      //disconnect all is not async signal safe, so we need to call it here
-      disconnect_all();
-      break;
-    }
+
   }
   close(buffer_data->fifo_fd);
   pthread_exit(NULL);
@@ -386,6 +388,7 @@ static void *client_thread(void *arguments){
 
 
   while(1){
+  //PRINTF("CLIENT THREAD\n"); para ver se as threads voltam depois do sigurs1
   //readMsg function ---------------------------
   disconnect_flag = 0;
   sem_wait(&empty_buffer);
@@ -425,14 +428,14 @@ static void *client_thread(void *arguments){
 
   int index;
   for(index = 0; index < MAX_CLIENTS; index++){
-    if(buffer_data->active_clients[index].req_fd == 0){ 
+    if(active_clients[index].req_fd == 0){ 
       
-      buffer_data->active_clients[index].req_fd = req_pipe_fd;
-      strcpy(buffer_data->active_clients[index].req_pipe_path,req_pipe_path);
-      buffer_data->active_clients[index].resp_fd = resp_pipe_fd;
-      strcpy(buffer_data->active_clients[index].resp_pipe_path,resp_pipe_path);
-      buffer_data->active_clients[index].notif_fd = notif_pipe_fd;
-      strcpy(buffer_data->active_clients[index].notif_pipe_path,notif_pipe_path);
+      active_clients[index].req_fd = req_pipe_fd;
+      strcpy(active_clients[index].req_pipe_path,req_pipe_path);
+      active_clients[index].resp_fd = resp_pipe_fd;
+      strcpy(active_clients[index].resp_pipe_path,resp_pipe_path);
+      active_clients[index].notif_fd = notif_pipe_fd;
+      strcpy(active_clients[index].notif_pipe_path,notif_pipe_path);
       break;
     }
   }
@@ -501,9 +504,9 @@ static void *client_thread(void *arguments){
           
           result = disconnect(notif_pipe_fd);
 
-          buffer_data->active_clients[index].req_fd = 0;
-          buffer_data->active_clients[index].resp_fd = 0;
-          buffer_data->active_clients[index].notif_fd = 0;
+          active_clients[index].req_fd = 0;
+          active_clients[index].resp_fd = 0;
+          active_clients[index].notif_fd = 0;
 
           resp_buffer[0] = get_code_string(OP_CODE_DISCONNECT);
           resp_buffer[1] = result;
@@ -645,9 +648,9 @@ int requests_buffer_init(struct ManagingClients* buffer,char* fifo_name) {
   *(buffer->read_index)= 0;
 
   for(int i = 0; i < MAX_CLIENTS; i++){
-    buffer->active_clients[i].req_fd = 0;
-    buffer->active_clients[i].resp_fd = 0;
-    buffer->active_clients[i].notif_fd = 0;
+    active_clients[i].req_fd = 0;
+    active_clients[i].resp_fd = 0;
+    active_clients[i].notif_fd = 0;
   }
   return 0;
 }
