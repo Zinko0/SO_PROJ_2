@@ -85,6 +85,9 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
     keyNode->value = strdup(value); // Allocate memory for the value
     keyNode->next = ht->table[index]; // Link to existing nodes
     ht->table[index] = keyNode; // Place new key node at the start of the list
+    for(int i = 0; i < MAX_CLIENTS; i++) {
+        keyNode->subscribers_fds[i] = 0;
+    }
     return 0;
 }
 

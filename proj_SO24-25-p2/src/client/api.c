@@ -170,7 +170,7 @@ void *kvs_get_notification(void* arg) {
   while (*connected) {
     if(read_all(filedesc[3],buffer,sizeof(buffer),NULL) != 1){
       if (errno == EPIPE){
-        terminate();
+        
         break;
       }
       continue;
