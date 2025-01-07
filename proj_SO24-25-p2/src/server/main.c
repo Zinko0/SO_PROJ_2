@@ -61,8 +61,8 @@ int signal_received = 0;
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t n_current_backups_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t semExMut = PTHREAD_MUTEX_INITIALIZER;
-sem_t full_buffer;
-sem_t empty_buffer;
+sem_t productor_buffer;
+sem_t consumer_buffer;
 
 size_t active_backups = 0;     // Number of active backups
 size_t max_backups;            // Maximum allowed simultaneous backups
@@ -97,7 +97,6 @@ static void sigusr1_handler(int signo) {
     exit(EXIT_FAILURE);
   }
   if (signo == SIGUSR1) {
-    close_all_clients();
     signal_received = 1;
   }
   return;
@@ -333,16 +332,17 @@ static void *managing_clients(void* arguments) {
 
   //Is allways reading from the FIFO waiting for a client to connect
   while (1){
-    while(read_all(buffer_data->fifo_fd, buffer, sizeof(buffer), NULL) != 1); 
-
     if(signal_received == 1){
+      close_all_clients();
       //disconnect all is not async signal safe, so we need to call it here
       disconnect_all();
       break;
     }
+    while(read_all(buffer_data->fifo_fd, buffer, sizeof(buffer), NULL) != 1); 
+
 
     if(get_code(buffer[0]) == OP_CODE_CONNECT){
-      sem_wait(&full_buffer);
+      sem_wait(&productor_buffer);
 
       pthread_mutex_lock(&semExMut);
 
@@ -357,7 +357,7 @@ static void *managing_clients(void* arguments) {
       write_index = (write_index + 1)% MAX_CLIENTS; 
       pthread_mutex_unlock(&semExMut);
 
-      sem_post(&empty_buffer);
+      sem_post(&consumer_buffer);
     }
 
 
@@ -391,7 +391,7 @@ static void *client_thread(void *arguments){
   //PRINTF("CLIENT THREAD\n"); para ver se as threads voltam depois do sigurs1
   //readMsg function ---------------------------
   disconnect_flag = 0;
-  sem_wait(&empty_buffer);
+  sem_wait(&consumer_buffer);
   
   pthread_mutex_lock(&semExMut);
 
@@ -410,7 +410,7 @@ static void *client_thread(void *arguments){
 
   pthread_mutex_unlock(&semExMut);
 
-  sem_post(&full_buffer);
+  sem_post(&productor_buffer);
 
   //--------------------------------------------
 
@@ -700,8 +700,8 @@ int main(int argc, char** argv) {
   }
 
   //initialize the semaphore
-  sem_init(&full_buffer, 0, MAX_CLIENTS);
-  sem_init(&empty_buffer, 0, 0);
+  sem_init(&productor_buffer, 0, MAX_CLIENTS);
+  sem_init(&consumer_buffer, 0, 0);
 
   //initialize the global sigset
   initialize_global_sigset();
