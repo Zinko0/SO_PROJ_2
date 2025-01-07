@@ -128,13 +128,6 @@ char get_code_string(enum Code code) {
   }
 }
 
-void pipe_string_filling(const char* str, size_t length, char* aux) {
-  strcpy(aux, str);
-  for(size_t i = length; i < MAX_STRING_SIZE; i++){
-    aux[i] = '\0';
-  }
-}
-
 void key_string_filling(const char* str, size_t length, char* aux) {
   strcpy(aux, str);
   for(size_t i = length; i < MAX_STRING_SIZE; i++){

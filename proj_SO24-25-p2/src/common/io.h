@@ -30,8 +30,6 @@ enum Code get_code(char c);
 
 char get_code_string(enum Code code);
 
-void pipe_string_filling(const char* str, size_t size, char* aux);
-
 void key_string_filling(const char* str, size_t length, char* aux);
 
 void key_value_string_filling(const char* key, const char* value, size_t key_length, size_t value_length, char* aux);

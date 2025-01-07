@@ -20,17 +20,13 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   //------------------------------------------
   
   char buffer[1 + MAX_PIPE_PATH_LENGTH * 3];
-  char filled_req_pipe[MAX_PIPE_PATH_LENGTH +1];
-  char filled_resp_pipe[MAX_PIPE_PATH_LENGTH +1];
-  char filled_notif_pipe[MAX_PIPE_PATH_LENGTH];
-  pipe_string_filling(req_pipe_path,strlen(req_pipe_path),filled_req_pipe);
-  pipe_string_filling(resp_pipe_path,strlen(resp_pipe_path),filled_resp_pipe);
-  pipe_string_filling(notif_pipe_path,strlen(notif_pipe_path),filled_notif_pipe);
+
+  memset(buffer,0,sizeof(buffer));
 
   buffer[0] = get_code_string(OP_CODE_CONNECT);
-  strncpy(buffer + 1,filled_req_pipe,(MAX_PIPE_PATH_LENGTH) * sizeof(char));
-  strncpy(buffer + 1 + MAX_PIPE_PATH_LENGTH,filled_resp_pipe,(MAX_PIPE_PATH_LENGTH) * sizeof(char));
-  strncpy(buffer + 1 + (2 * MAX_PIPE_PATH_LENGTH),filled_notif_pipe,(MAX_PIPE_PATH_LENGTH) * sizeof(char));
+  strncpy(buffer + 1,req_pipe_path,(strlen(req_pipe_path)) * sizeof(char));
+  strncpy(buffer + 1 + MAX_PIPE_PATH_LENGTH,resp_pipe_path,(strlen(resp_pipe_path)) * sizeof(char));
+  strncpy(buffer + 1 + (2 * MAX_PIPE_PATH_LENGTH),notif_pipe_path,(strlen(notif_pipe_path)) * sizeof(char));
 
   
   if(write_all(filedesc[0], buffer, sizeof(buffer)) == -1){
@@ -38,19 +34,19 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   }
  //------------------------------------------
  
-  if(create_pipe(filled_req_pipe) == -1){
+  if(create_pipe(req_pipe_path) == -1){
     return 1;
   }
-  if(create_pipe(filled_resp_pipe) == -1){
+  if(create_pipe(resp_pipe_path) == -1){
     return 1;
   }
 
-  if(create_pipe(filled_notif_pipe) == -1){
+  if(create_pipe(notif_pipe_path) == -1){
     return 1;
   }
-  filedesc[1] = open(filled_req_pipe,O_WRONLY);
-  filedesc[2] = open(filled_resp_pipe,O_RDONLY);
-  filedesc[3] = open(filled_notif_pipe,O_RDONLY);
+  filedesc[1] = open(req_pipe_path,O_WRONLY);
+  filedesc[2] = open(resp_pipe_path,O_RDONLY);
+  filedesc[3] = open(notif_pipe_path,O_RDONLY);
   for(int i = 1; i < 4; i++){
     if(filedesc[i] == -1){
       return 1;
