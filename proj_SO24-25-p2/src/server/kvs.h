@@ -16,7 +16,7 @@ typedef struct KeyNode {
 
 typedef struct HashTable {
     KeyNode *table[TABLE_SIZE];
-    pthread_rwlock_t tablelock;
+    pthread_rwlock_t tablelock[TABLE_SIZE];
 } HashTable;
 
 /// Creates a new KVS hash table.

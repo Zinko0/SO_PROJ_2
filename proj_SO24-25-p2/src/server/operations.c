@@ -10,6 +10,7 @@
 #include "io.h"
 #include "kvs.h"
 #include "operations.h"
+#include "lock.h"
 
 static struct HashTable *kvs_table = NULL;
 
@@ -18,6 +19,31 @@ static struct HashTable *kvs_table = NULL;
 /// @return Timespec with the given delay.
 static struct timespec delay_to_timespec(unsigned int delay_ms) {
   return (struct timespec){delay_ms / 1000, (delay_ms % 1000) * 1000000};
+}
+
+int hash_key_sort(const void *a, const void *b) {
+  return *(int *)a - *(int *)b;
+}
+
+int *set_of_keys(int *hash_keys, size_t num_pairs,
+                 size_t *individual_keys_length) {
+  int *individual_hash_keys = malloc(sizeof(int) * num_pairs);
+  if (individual_hash_keys == NULL) {
+    fprintf(stderr, "Failed to allocate memory\n");
+    return NULL;
+  }
+  size_t individual_key_indexes = 1;
+  individual_hash_keys[0] = hash_keys[0];
+
+  for (size_t i = 1; i < num_pairs; i++) {
+    if (hash_keys[i] != hash_keys[i - 1]) {
+      individual_hash_keys[individual_key_indexes] = hash_keys[i];
+      individual_key_indexes++;
+    }
+  }
+
+  *individual_keys_length = individual_key_indexes;
+  return individual_hash_keys;
 }
 
 int kvs_init() {
@@ -48,7 +74,23 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE],
     return 1;
   }
 
-  pthread_rwlock_wrlock(&kvs_table->tablelock);
+  int *hash_keys = malloc(sizeof(int) * TABLE_SIZE);
+  int* individual_hash_keys;
+  size_t individual_keys_length;
+
+  for (size_t i = 0; i < num_pairs; i++) {
+    hash_keys[i] = hash(keys[i]);
+  }
+  // Sorting the hash keys
+  qsort(hash_keys, num_pairs, sizeof(int), hash_key_sort);
+
+  individual_hash_keys = set_of_keys(hash_keys, num_pairs, &individual_keys_length);
+
+  if (write_lock_table(individual_keys_length, individual_hash_keys,
+                        kvs_table->tablelock) != 0) {
+    fprintf(stderr, "Failed to writelock hashtable\n");
+    return NULL;
+  };
 
   for (size_t i = 0; i < num_pairs; i++) {
     if (write_pair(kvs_table, keys[i], values[i]) != 0) {
@@ -56,7 +98,15 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE],
     }
   }
 
-  pthread_rwlock_unlock(&kvs_table->tablelock);
+  if (rw_unlock_table(individual_keys_length, individual_hash_keys,
+                      kvs_table->tablelock) == -1) {
+    fprintf(stderr, "Failed to unlock hashtable\n");
+    return NULL;
+  }
+
+  free(individual_hash_keys);
+  free(hash_keys);
+
   return 0;
 }
 
@@ -66,7 +116,23 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
     return 1;
   }
   
-  pthread_rwlock_rdlock(&kvs_table->tablelock);
+  int *hash_keys = malloc(sizeof(int) * TABLE_SIZE);
+  int* individual_hash_keys;
+  size_t individual_keys_length;
+
+  for (size_t i = 0; i < num_pairs; i++) {
+    hash_keys[i] = hash(keys[i]);
+  }
+  // Sorting the hash keys
+  qsort(hash_keys, num_pairs, sizeof(int), hash_key_sort);
+
+  individual_hash_keys = set_of_keys(hash_keys, num_pairs, &individual_keys_length);
+
+  if (read_lock_table(individual_keys_length, individual_hash_keys,
+                        kvs_table->tablelock) != 0) {
+    fprintf(stderr, "Failed to writelock hashtable\n");
+    return NULL;
+  };
 
   write_str(fd, "[");
   for (size_t i = 0; i < num_pairs; i++) {
@@ -81,8 +147,17 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
     free(result);
   }
   write_str(fd, "]\n");
-  
-  pthread_rwlock_unlock(&kvs_table->tablelock);
+
+  if (rw_unlock_table(individual_keys_length, individual_hash_keys,
+                      kvs_table->tablelock) == -1) {
+    fprintf(stderr, "Failed to unlock hashtable\n");
+    return NULL;
+  }
+
+  free(individual_hash_keys);
+  free(hash_keys);
+
+
   return 0;
 }
 
@@ -92,7 +167,23 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
     return 1;
   }
   
-  pthread_rwlock_wrlock(&kvs_table->tablelock);
+  int *hash_keys = malloc(sizeof(int) * TABLE_SIZE);
+  int* individual_hash_keys;
+  size_t individual_keys_length;
+
+  for (size_t i = 0; i < num_pairs; i++) {
+    hash_keys[i] = hash(keys[i]);
+  }
+  // Sorting the hash keys
+  qsort(hash_keys, num_pairs, sizeof(int), hash_key_sort);
+
+  individual_hash_keys = set_of_keys(hash_keys, num_pairs, &individual_keys_length);
+
+  if (write_lock_table(individual_keys_length, individual_hash_keys,
+                        kvs_table->tablelock) != 0) {
+    fprintf(stderr, "Failed to writelock hashtable\n");
+    return NULL;
+  };
 
   int aux = 0;
   for (size_t i = 0; i < num_pairs; i++) {
@@ -110,7 +201,16 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
     write_str(fd, "]\n");
   }
   //ver os subscribers
-  pthread_rwlock_unlock(&kvs_table->tablelock);
+
+  if (rw_unlock_table(individual_keys_length, individual_hash_keys,
+                      kvs_table->tablelock) == -1) {
+    fprintf(stderr, "Failed to unlock hashtable\n");
+    return NULL;
+  }
+
+  free(individual_hash_keys);
+  free(hash_keys);
+
   return 0;
 }
 
@@ -119,8 +219,17 @@ void kvs_show(int fd) {
     fprintf(stderr, "KVS state must be initialized\n");
     return;
   }
+
+  int* hash_keys = malloc(sizeof(int) * TABLE_SIZE);
   
-  pthread_rwlock_rdlock(&kvs_table->tablelock);
+  for (int i = 0; i < TABLE_SIZE; i++) {
+    hash_keys[i] = i;
+  }
+  if (read_lock_table(TABLE_SIZE, hash_keys, kvs_table->tablelock) == -1) {
+    fprintf(stderr, "Failed to readlock hashtable\n");
+    return NULL;
+  }
+
   char aux[MAX_STRING_SIZE];
   
   for (int i = 0; i < TABLE_SIZE; i++) {
@@ -132,7 +241,12 @@ void kvs_show(int fd) {
     }
   }
 
-  pthread_rwlock_unlock(&kvs_table->tablelock);
+  if (rw_unlock_table(TABLE_SIZE, hash_keys, kvs_table->tablelock) == -1) {
+    fprintf(stderr, "Failed to unlock hashtable\n");
+    return NULL;
+  }
+
+  free(hash_keys);
 }
 
 int kvs_backup(size_t num_backup,char* job_filename , char* directory) {
@@ -186,14 +300,17 @@ char subscribe(char *key, int fd) {
     return '1';
   }
   
-  pthread_rwlock_wrlock(&kvs_table->tablelock);
+  int hash_key = hash(key);
+
+  pthread_rwlock_wrlock(&kvs_table->tablelock[hash_key]);
 
   if (write_subscription(kvs_table, key, fd) != 0) {
     pthread_rwlock_unlock(&kvs_table->tablelock);
     return '0';
   }
   
-    pthread_rwlock_unlock(&kvs_table->tablelock);
+  pthread_rwlock_unlock(&kvs_table->tablelock[hash_key]);
+
   return '1';
 }
 
@@ -202,23 +319,33 @@ char unsubscribe(char *key, int fd) {
     fprintf(stderr, "KVS state must be initialized\n");
     return '1';
   }
+
+  int hash_key = hash(key);
   
-  pthread_rwlock_wrlock(&kvs_table->tablelock);
+  pthread_rwlock_wrlock(&kvs_table->tablelock[hash_key]);
 
   if (delete_subscription(kvs_table, key, fd) != 0) {
     pthread_rwlock_unlock(&kvs_table->tablelock);
     return '1';
   }
   
-  pthread_rwlock_unlock(&kvs_table->tablelock);
+  pthread_rwlock_unlock(&kvs_table->tablelock[hash_key]);
   return '0';
 }
 
 char disconnect(int fd) {
   //percorrer a lista de keys e dar delete_subscription
   KeyNode *keyNode;
-  //temos de dar lock à tabela toda (podemos depois usar a tática do show que vai libertar os locks a cada iteração)
-  pthread_rwlock_wrlock(&kvs_table->tablelock);
+
+  int* hash_keys = malloc(sizeof(int) * TABLE_SIZE);
+  
+  for (int i = 0; i < TABLE_SIZE; i++) {
+    hash_keys[i] = i;
+  }
+  if (write_lock_table(TABLE_SIZE, hash_keys, kvs_table->tablelock) == -1) {
+    fprintf(stderr, "Failed to readlock hashtable\n");
+    return NULL;
+  }
 
   for(int i = 0; i < TABLE_SIZE; i++){
     keyNode = kvs_table->table[i];
@@ -232,7 +359,12 @@ char disconnect(int fd) {
     }
   }
 
-  pthread_rwlock_unlock(&kvs_table->tablelock);
+  if (rw_unlock_table(TABLE_SIZE, hash_keys, kvs_table->tablelock) == -1) {
+    fprintf(stderr, "Failed to unlock hashtable\n");
+    return NULL;
+  }
+
+  free(hash_keys);
   
   return '0';
 }
@@ -240,8 +372,16 @@ char disconnect(int fd) {
 int disconnect_all() {
   //percorrer a lista de keys e dar delete_subscription
   KeyNode *keyNode;
-  //temos de dar lock à tabela toda (podemos depois usar a tática do show que vai libertar os locks a cada iteração)
-  pthread_rwlock_wrlock(&kvs_table->tablelock);
+
+  int* hash_keys = malloc(sizeof(int) * TABLE_SIZE);
+  
+  for (int i = 0; i < TABLE_SIZE; i++) {
+    hash_keys[i] = i;
+  }
+  if (write_lock_table(TABLE_SIZE, hash_keys, kvs_table->tablelock) == -1) {
+    fprintf(stderr, "Failed to readlock hashtable\n");
+    return NULL;
+  }
 
   for(int i = 0; i < TABLE_SIZE; i++){
     keyNode = kvs_table->table[i];
@@ -253,7 +393,12 @@ int disconnect_all() {
     }
   }
 
-  pthread_rwlock_unlock(&kvs_table->tablelock);
-  
+  if (rw_unlock_table(TABLE_SIZE, hash_keys, kvs_table->tablelock) == -1) {
+    fprintf(stderr, "Failed to unlock hashtable\n");
+    return NULL;
+  }
+
+  free(hash_keys);
+    
   return 0;
 }
