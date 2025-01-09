@@ -32,6 +32,9 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   if(write_all(filedesc[0], buffer, sizeof(buffer)) == -1){
     return 1;
   }
+  //its the only time the client communicates with the server through the server pipe
+  //so we close it
+  close(filedesc[0]);
  //------------------------------------------
  
   if(create_pipe(req_pipe_path) == -1){
@@ -88,7 +91,7 @@ int kvs_disconnect(void) {
     }
     return 1;
   }
-  for(int i = 0; i < 4; i++){
+  for(int i = 1; i < 4; i++){
     if(close(filedesc[i]) == -1){
       return 1;
     }
