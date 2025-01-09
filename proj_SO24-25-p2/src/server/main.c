@@ -57,8 +57,6 @@ sigset_t set_with_sigusr1;
 int signal_received = 0;
 
 
-
-pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t n_current_backups_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t semExMut = PTHREAD_MUTEX_INITIALIZER;
 sem_t productor_buffer;
@@ -347,13 +345,6 @@ static void *managing_clients(void* arguments) {
       pthread_mutex_lock(&semExMut);
 
       assing_pipe_data(buffer_data->buffer,write_index,buffer + 1);
-      printf("MANAGER POV:\n");
-      for(int i = 0; i < MAX_CLIENTS; i++){
-          printf("index: %d ",i);
-          printf("req_fd: %s ",buffer_data->buffer[i].req_pipe_path);
-          printf("resp_fd: %s ",buffer_data->buffer[i].resp_pipe_path);
-          printf("notif_fd: %s\n",buffer_data->buffer[i].notif_pipe_path);
-      }
       write_index = (write_index + 1)% MAX_CLIENTS; 
       pthread_mutex_unlock(&semExMut);
 
@@ -399,13 +390,6 @@ static void *client_thread(void *arguments){
   strncpy(resp_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].resp_pipe_path,MAX_PIPE_PATH_LENGTH);
   strncpy(notif_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].notif_pipe_path,MAX_PIPE_PATH_LENGTH);
 
-  printf("CLIENT POV:\n");
-  for(int i = 0; i < MAX_CLIENTS; i++){
-      printf("index: %d ",i);
-      printf("req_fd: %s ",buffer_data->buffer[i].req_pipe_path);
-      printf("resp_fd: %s ",buffer_data->buffer[i].resp_pipe_path);
-      printf("notif_fd: %s\n",buffer_data->buffer[i].notif_pipe_path);
-  }
   *(buffer_data->read_index) = (*(buffer_data->read_index) + 1) % MAX_CLIENTS;
 
   pthread_mutex_unlock(&semExMut);
@@ -415,8 +399,6 @@ static void *client_thread(void *arguments){
   //--------------------------------------------
 
   //------Connecting function--------------------------
-
-  pthread_mutex_lock(&lock);
 
   req_pipe_fd = open(req_pipe_path, O_RDONLY);
   resp_pipe_fd = open(resp_pipe_path, O_WRONLY);
@@ -439,7 +421,7 @@ static void *client_thread(void *arguments){
       break;
     }
   }
-  pthread_mutex_unlock(&lock);
+
   //-------------------------------------------------------------------------------------
     //while the client is connected
 
