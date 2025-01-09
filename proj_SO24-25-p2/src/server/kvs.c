@@ -188,6 +188,8 @@ void free_table(HashTable *ht) {
             free(temp);
         }
     }
-    pthread_rwlock_destroy(&ht->tablelock);
+    for(int i = 0; i < TABLE_SIZE; i++) {
+        pthread_rwlock_destroy(&ht->tablelock[i]);
+    }
     free(ht);
 }
