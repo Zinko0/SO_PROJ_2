@@ -99,11 +99,10 @@ int kvs_disconnect(void) {
 
 int kvs_subscribe(const char* key) {
   // send subscribe message to request pipe and wait for response in response pipe
-  char filled_key[MAX_STRING_SIZE + 1]; //key + \0
-  key_string_filling(key,strlen(key),filled_key);
   char buffer[1 + MAX_STRING_SIZE + 1];
+  memset(buffer,0,sizeof(buffer));
   buffer[0] = get_code_string(OP_CODE_SUBSCRIBE);
-  strncpy(buffer + 1, filled_key, (MAX_STRING_SIZE + 1)* sizeof(char));
+  strncpy(buffer + 1, key, (MAX_STRING_SIZE + 1)* sizeof(char));
 
   if(write_all(filedesc[1],buffer, sizeof(buffer)) == -1){
     if (errno == EPIPE){
@@ -127,11 +126,10 @@ int kvs_subscribe(const char* key) {
 
 int kvs_unsubscribe(const char* key) {
   // send unsubscribe message to request pipe and wait for response in response pipe
-  char filled_key[MAX_STRING_SIZE + 1]; //key + \0
-  key_string_filling(key,strlen(key),filled_key);
   char buffer[1 + MAX_STRING_SIZE + 1];
-  buffer[0] = get_code_string(OP_CODE_UNSUBSCRIBE);
-  strncpy(buffer + 1, filled_key,(MAX_STRING_SIZE + 1)* sizeof(char));
+  memset(buffer,0,sizeof(buffer));
+  buffer[0] = get_code_string(OP_CODE_SUBSCRIBE);
+  strncpy(buffer + 1, key, (MAX_STRING_SIZE + 1)* sizeof(char));
 
   if(write_all(filedesc[1],buffer, sizeof(buffer)) == -1){
     if (errno == EPIPE){

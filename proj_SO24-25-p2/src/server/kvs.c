@@ -70,7 +70,9 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
             for(int i = 0; i < MAX_CLIENTS; i++) {
                 if (keyNode->subscribers_fds[i] != 0) {
                     char str[(MAX_STRING_SIZE + 1) * 2];
-                    key_value_string_filling((const char*)key, (const char*)value, strlen(key), strlen(value), str);
+                    memset(str, 0, sizeof(str));
+                    strncpy(str, key, strlen(key));
+                    strncpy(str + MAX_STRING_SIZE + 1, value, strlen(value));
                     write_all(keyNode->subscribers_fds[i], str, sizeof(str));
                 }
             }
@@ -145,7 +147,9 @@ int delete_pair(HashTable *ht, const char *key) {
             for(int i = 0; i < MAX_CLIENTS; i++) {
                 if (keyNode->subscribers_fds[i] != 0) {
                     char str[(MAX_STRING_SIZE+1)*2];
-                    key_value_string_filling((const char*)key, "DELETED", strlen(key), strlen("DELETED"), str);
+                    memset(str, 0, sizeof(str));
+                    strncpy(str, key, strlen(key));
+                    strncpy(str + MAX_STRING_SIZE + 1, "DELETED", strlen("DELETED"));
                     write_all(keyNode->subscribers_fds[i], str, sizeof(str));
                 }
             }

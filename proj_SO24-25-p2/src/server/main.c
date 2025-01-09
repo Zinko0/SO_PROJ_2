@@ -657,7 +657,7 @@ int requests_buffer_init(struct ManagingClients* buffer,char* fifo_name) {
 
 
 int main(int argc, char** argv) {
-  if (argc < 4) {
+  if (argc != 5) {
     write_str(STDERR_FILENO, "Usage: ");
     write_str(STDERR_FILENO, argv[0]);
     write_str(STDERR_FILENO, " <jobs_dir>");

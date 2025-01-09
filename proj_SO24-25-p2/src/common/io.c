@@ -127,24 +127,3 @@ char get_code_string(enum Code code) {
       return '5';
   }
 }
-
-void key_string_filling(const char* str, size_t length, char* aux) {
-  strcpy(aux, str);
-  for(size_t i = length; i < MAX_STRING_SIZE; i++){
-    aux[i] = '\0';
-  }
-} 
-
-void key_value_string_filling(const char* key, const char* value, size_t key_length, size_t value_length, char* aux) {
-
-  strcpy(aux, key);
-  for(size_t i = key_length; i <= MAX_STRING_SIZE; i++){
-    aux[i] = '\0';
-  }
-  strcpy(aux + MAX_STRING_SIZE + 1, value);  //aux[41]
-  size_t total_length = MAX_STRING_SIZE + 1 + value_length;
-  //goes from aux[41 + len] to aux[81]
-  for(size_t i = total_length; i < ((MAX_STRING_SIZE + 1)*2); i++){
-    aux[i] = '\0';
-  }
-}
