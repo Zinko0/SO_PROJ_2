@@ -1,3 +1,5 @@
+#include "operations.h"
+
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,7 +11,6 @@
 #include "constants.h"
 #include "io.h"
 #include "kvs.h"
-#include "operations.h"
 #include "lock.h"
 
 static struct HashTable *kvs_table = NULL;
@@ -21,12 +22,9 @@ static struct timespec delay_to_timespec(unsigned int delay_ms) {
   return (struct timespec){delay_ms / 1000, (delay_ms % 1000) * 1000000};
 }
 
-int hash_key_sort(const void *a, const void *b) {
-  return *(int *)a - *(int *)b;
-}
+int hash_key_sort(const void *a, const void *b) { return *(int *)a - *(int *)b; }
 
-int *set_of_keys(int *hash_keys, size_t num_pairs,
-                 size_t *individual_keys_length) {
+int *set_of_keys(int *hash_keys, size_t num_pairs, size_t *individual_keys_length) {
   int *individual_hash_keys = malloc(sizeof(int) * num_pairs);
   if (individual_hash_keys == NULL) {
     fprintf(stderr, "Failed to allocate memory\n");
@@ -67,15 +65,14 @@ int kvs_terminate() {
   return 0;
 }
 
-int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE],
-              char values[][MAX_STRING_SIZE]) {
+int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE], char values[][MAX_STRING_SIZE]) {
   if (kvs_table == NULL) {
     fprintf(stderr, "KVS state must be initialized\n");
     return 1;
   }
 
-  int hash_keys[TABLE_SIZE]; 
-  int* individual_hash_keys;
+  int hash_keys[TABLE_SIZE];
+  int *individual_hash_keys;
   size_t individual_keys_length;
 
   for (size_t i = 0; i < num_pairs; i++) {
@@ -86,8 +83,7 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE],
 
   individual_hash_keys = set_of_keys(hash_keys, num_pairs, &individual_keys_length);
 
-  if (write_lock_table(individual_keys_length, individual_hash_keys,
-                        kvs_table->tablelock) != 0) {
+  if (write_lock_table(individual_keys_length, individual_hash_keys, kvs_table->tablelock) != 0) {
     fprintf(stderr, "Failed to writelock hashtable\n");
     return 1;
   };
@@ -98,8 +94,7 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE],
     }
   }
 
-  if (rw_unlock_table(individual_keys_length, individual_hash_keys,
-                      kvs_table->tablelock) == -1) {
+  if (rw_unlock_table(individual_keys_length, individual_hash_keys, kvs_table->tablelock) == -1) {
     fprintf(stderr, "Failed to unlock hashtable\n");
     return 1;
   }
@@ -113,8 +108,8 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
     fprintf(stderr, "KVS state must be initialized\n");
     return 1;
   }
-  int hash_keys[TABLE_SIZE]; 
-  int* individual_hash_keys;
+  int hash_keys[TABLE_SIZE];
+  int *individual_hash_keys;
   size_t individual_keys_length;
 
   for (size_t i = 0; i < num_pairs; i++) {
@@ -125,8 +120,7 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
 
   individual_hash_keys = set_of_keys(hash_keys, num_pairs, &individual_keys_length);
 
-  if (read_lock_table(individual_keys_length, individual_hash_keys,
-                        kvs_table->tablelock) != 0) {
+  if (read_lock_table(individual_keys_length, individual_hash_keys, kvs_table->tablelock) != 0) {
     fprintf(stderr, "Failed to writelock hashtable\n");
     return 1;
   };
@@ -145,8 +139,7 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
   }
   write_str(fd, "]\n");
 
-  if (rw_unlock_table(individual_keys_length, individual_hash_keys,
-                      kvs_table->tablelock) == -1) {
+  if (rw_unlock_table(individual_keys_length, individual_hash_keys, kvs_table->tablelock) == -1) {
     fprintf(stderr, "Failed to unlock hashtable\n");
     return 1;
   }
@@ -160,9 +153,9 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
     fprintf(stderr, "KVS state must be initialized\n");
     return 1;
   }
-  
-  int hash_keys[TABLE_SIZE]; 
-  int* individual_hash_keys;
+
+  int hash_keys[TABLE_SIZE];
+  int *individual_hash_keys;
   size_t individual_keys_length;
 
   for (size_t i = 0; i < num_pairs; i++) {
@@ -173,8 +166,7 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
 
   individual_hash_keys = set_of_keys(hash_keys, num_pairs, &individual_keys_length);
 
-  if (write_lock_table(individual_keys_length, individual_hash_keys,
-                        kvs_table->tablelock) != 0) {
+  if (write_lock_table(individual_keys_length, individual_hash_keys, kvs_table->tablelock) != 0) {
     fprintf(stderr, "Failed to writelock hashtable\n");
     return 1;
   };
@@ -195,8 +187,7 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
     write_str(fd, "]\n");
   }
 
-  if (rw_unlock_table(individual_keys_length, individual_hash_keys,
-                      kvs_table->tablelock) == -1) {
+  if (rw_unlock_table(individual_keys_length, individual_hash_keys, kvs_table->tablelock) == -1) {
     fprintf(stderr, "Failed to unlock hashtable\n");
     return 1;
   }
@@ -210,8 +201,8 @@ void kvs_show(int fd) {
     fprintf(stderr, "KVS state must be initialized\n");
     return;
   }
-  int hash_keys[TABLE_SIZE]; 
-  
+  int hash_keys[TABLE_SIZE];
+
   for (int i = 0; i < TABLE_SIZE; i++) {
     hash_keys[i] = i;
   }
@@ -221,13 +212,13 @@ void kvs_show(int fd) {
   }
 
   char aux[MAX_STRING_SIZE];
-  
+
   for (int i = 0; i < TABLE_SIZE; i++) {
-    KeyNode *keyNode = kvs_table->table[i]; // Get the next list head
+    KeyNode *keyNode = kvs_table->table[i];  // Get the next list head
     while (keyNode != NULL) {
       snprintf(aux, MAX_STRING_SIZE, "(%s, %s)\n", keyNode->key, keyNode->value);
       write_str(fd, aux);
-      keyNode = keyNode->next; // Move to the next node of the list
+      keyNode = keyNode->next;  // Move to the next node of the list
     }
   }
 
@@ -237,18 +228,17 @@ void kvs_show(int fd) {
   }
 }
 
-int kvs_backup(size_t num_backup,char* job_filename , char* directory) {
+int kvs_backup(size_t num_backup, char *job_filename, char *directory) {
   pid_t pid;
   char bck_name[50];
-  snprintf(bck_name, sizeof(bck_name), "%s/%s-%ld.bck", directory, strtok(job_filename, "."),
-           num_backup);
+  snprintf(bck_name, sizeof(bck_name), "%s/%s-%ld.bck", directory, strtok(job_filename, "."), num_backup);
 
-  int hash_keys[TABLE_SIZE]; 
-  
+  int hash_keys[TABLE_SIZE];
+
   for (int i = 0; i < TABLE_SIZE; i++) {
     hash_keys[i] = i;
   }
-  
+
   if (read_lock_table(TABLE_SIZE, hash_keys, kvs_table->tablelock) == -1) {
     fprintf(stderr, "Failed to readlock hashtable\n");
     return 1;
@@ -263,23 +253,19 @@ int kvs_backup(size_t num_backup,char* job_filename , char* directory) {
     // fork happens in a multi thread context (see man fork)
     int fd = open(bck_name, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     for (int i = 0; i < TABLE_SIZE; i++) {
-      KeyNode *keyNode = kvs_table->table[i]; // Get the next list head
+      KeyNode *keyNode = kvs_table->table[i];  // Get the next list head
       while (keyNode != NULL) {
         char aux[MAX_STRING_SIZE];
         aux[0] = '(';
-        size_t num_bytes_copied = 1; // the "("
+        size_t num_bytes_copied = 1;  // the "("
         // the - 1 are all to leave space for the '/0'
-        num_bytes_copied += strn_memcpy(aux + num_bytes_copied,
-                                        keyNode->key, MAX_STRING_SIZE - num_bytes_copied - 1);
-        num_bytes_copied += strn_memcpy(aux + num_bytes_copied,
-                                        ", ", MAX_STRING_SIZE - num_bytes_copied - 1);
-        num_bytes_copied += strn_memcpy(aux + num_bytes_copied,
-                                        keyNode->value, MAX_STRING_SIZE - num_bytes_copied - 1);
-        num_bytes_copied += strn_memcpy(aux + num_bytes_copied,
-                                        ")\n", MAX_STRING_SIZE - num_bytes_copied - 1);
+        num_bytes_copied += strn_memcpy(aux + num_bytes_copied, keyNode->key, MAX_STRING_SIZE - num_bytes_copied - 1);
+        num_bytes_copied += strn_memcpy(aux + num_bytes_copied, ", ", MAX_STRING_SIZE - num_bytes_copied - 1);
+        num_bytes_copied += strn_memcpy(aux + num_bytes_copied, keyNode->value, MAX_STRING_SIZE - num_bytes_copied - 1);
+        num_bytes_copied += strn_memcpy(aux + num_bytes_copied, ")\n", MAX_STRING_SIZE - num_bytes_copied - 1);
         aux[num_bytes_copied] = '\0';
         write_str(fd, aux);
-        keyNode = keyNode->next; // Move to the next node of the list
+        keyNode = keyNode->next;  // Move to the next node of the list
       }
     }
     exit(1);
@@ -299,7 +285,7 @@ char subscribe(char *key, int fd) {
     fprintf(stderr, "KVS state must be initialized\n");
     return '1';
   }
-  
+
   int hash_key = hash(key);
 
   pthread_rwlock_wrlock(&kvs_table->tablelock[hash_key]);
@@ -308,7 +294,7 @@ char subscribe(char *key, int fd) {
     pthread_rwlock_unlock(&kvs_table->tablelock[hash_key]);
     return '0';
   }
-  
+
   pthread_rwlock_unlock(&kvs_table->tablelock[hash_key]);
 
   return '1';
@@ -321,24 +307,24 @@ char unsubscribe(char *key, int fd) {
   }
 
   int hash_key = hash(key);
-  
+
   pthread_rwlock_wrlock(&kvs_table->tablelock[hash_key]);
 
   if (delete_subscription(kvs_table, key, fd) != 0) {
     pthread_rwlock_unlock(&kvs_table->tablelock[hash_key]);
     return '1';
   }
-  
+
   pthread_rwlock_unlock(&kvs_table->tablelock[hash_key]);
   return '0';
 }
 
 char disconnect(int fd) {
-  //percorrer a lista de keys e dar delete_subscription
+  // percorrer a lista de keys e dar delete_subscription
   KeyNode *keyNode;
 
-  int* hash_keys = malloc(sizeof(int) * TABLE_SIZE);
-  
+  int *hash_keys = malloc(sizeof(int) * TABLE_SIZE);
+
   for (int i = 0; i < TABLE_SIZE; i++) {
     hash_keys[i] = i;
   }
@@ -347,11 +333,11 @@ char disconnect(int fd) {
     return '1';
   }
 
-  for(int i = 0; i < TABLE_SIZE; i++){
+  for (int i = 0; i < TABLE_SIZE; i++) {
     keyNode = kvs_table->table[i];
-    while(keyNode != NULL){
-      for(int j = 0; j < MAX_CLIENTS; j++){
-        if(keyNode->subscribers_fds[j] == fd){
+    while (keyNode != NULL) {
+      for (int j = 0; j < MAX_CLIENTS; j++) {
+        if (keyNode->subscribers_fds[j] == fd) {
           keyNode->subscribers_fds[j] = 0;
         }
       }
@@ -365,16 +351,16 @@ char disconnect(int fd) {
   }
 
   free(hash_keys);
-  
+
   return '0';
 }
 
 int disconnect_all() {
-  //percorrer a lista de keys e dar delete_subscription
+  // percorrer a lista de keys e dar delete_subscription
   KeyNode *keyNode;
 
-  int* hash_keys = malloc(sizeof(int) * TABLE_SIZE);
-  
+  int *hash_keys = malloc(sizeof(int) * TABLE_SIZE);
+
   for (int i = 0; i < TABLE_SIZE; i++) {
     hash_keys[i] = i;
   }
@@ -383,10 +369,10 @@ int disconnect_all() {
     return 1;
   }
 
-  for(int i = 0; i < TABLE_SIZE; i++){
+  for (int i = 0; i < TABLE_SIZE; i++) {
     keyNode = kvs_table->table[i];
-    while(keyNode != NULL){
-      for(int j = 0; j < MAX_CLIENTS; j++){
+    while (keyNode != NULL) {
+      for (int j = 0; j < MAX_CLIENTS; j++) {
         keyNode->subscribers_fds[j] = 0;
       }
       keyNode = keyNode->next;
@@ -399,6 +385,6 @@ int disconnect_all() {
   }
 
   free(hash_keys);
-    
+
   return 0;
 }

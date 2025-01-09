@@ -24,7 +24,7 @@ int write_all(int fd, const void *buffer, size_t size);
 
 void delay(unsigned int time_ms);
 
-int create_pipe(char const* pipe_path);
+int create_pipe(char const *pipe_path);
 
 enum Code get_code(char c);
 

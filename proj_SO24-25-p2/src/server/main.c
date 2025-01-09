@@ -1,26 +1,25 @@
-#include <unistd.h>
-#include <errno.h>
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <semaphore.h>
+#include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/stat.h>
-#include <stdio.h>
-#include <semaphore.h>
-#include <sys/types.h>
-#include <signal.h>
+#include <unistd.h>
 
 #include "constants.h"
-#include "parser.h"
-#include "operations.h"
 #include "io.h"
+#include "operations.h"
+#include "parser.h"
 #include "pthread.h"
-#include "src/common/protocol.h"
-#include "src/common/io.h"
 #include "src/common/constants.h"
+#include "src/common/io.h"
+#include "src/common/protocol.h"
 
 struct SharedData {
   DIR* dir;
@@ -44,39 +43,37 @@ struct ActiveClients {
 };
 
 struct ManagingClients {
-  //the buffer can have whatever size. 
+  // the buffer can have whatever size.
   struct PipeData buffer[MAX_CLIENTS];
-  size_t *read_index;
+  size_t* read_index;
   int fifo_fd;
 };
-
 
 struct ActiveClients active_clients[MAX_CLIENTS];
 
 sigset_t set_with_sigusr1;
 int signal_received = 0;
 
-
 pthread_mutex_t n_current_backups_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t semExMut = PTHREAD_MUTEX_INITIALIZER;
 sem_t productor_buffer;
 sem_t consumer_buffer;
 
-size_t active_backups = 0;     // Number of active backups
-size_t max_backups;            // Maximum allowed simultaneous backups
-size_t max_threads;            // Maximum allowed simultaneous threads
+size_t active_backups = 0;  // Number of active backups
+size_t max_backups;         // Maximum allowed simultaneous backups
+size_t max_threads;         // Maximum allowed simultaneous threads
 
 char* jobs_directory = NULL;
 
 void initialize_global_sigset() {
-    // Initialize the signal set
-    sigemptyset(&set_with_sigusr1);
-    sigaddset(&set_with_sigusr1, SIGUSR1);
+  // Initialize the signal set
+  sigemptyset(&set_with_sigusr1);
+  sigaddset(&set_with_sigusr1, SIGUSR1);
 }
 
-void close_all_clients(){
-  for(int i = 0; i < MAX_CLIENTS; i++){
-    if(active_clients[i].req_fd != 0){
+void close_all_clients() {
+  for (int i = 0; i < MAX_CLIENTS; i++) {
+    if (active_clients[i].req_fd != 0) {
       close(active_clients[i].req_fd);
       unlink(active_clients[i].req_pipe_path);
       close(active_clients[i].resp_fd);
@@ -91,7 +88,7 @@ void close_all_clients(){
 }
 
 static void sigusr1_handler(int signo) {
-  if(signal(SIGTERM, sigusr1_handler) == SIG_ERR){
+  if (signal(SIGTERM, sigusr1_handler) == SIG_ERR) {
     exit(EXIT_FAILURE);
   }
   if (signo == SIGUSR1) {
@@ -101,11 +98,11 @@ static void sigusr1_handler(int signo) {
 }
 
 int filter_job_files(const struct dirent* entry) {
-    const char* dot = strrchr(entry->d_name, '.');
-    if (dot != NULL && strcmp(dot, ".job") == 0) {
-        return 1;  // Keep this file (it has the .job extension)
-    }
-    return 0;
+  const char* dot = strrchr(entry->d_name, '.');
+  if (dot != NULL && strcmp(dot, ".job") == 0) {
+    return 1;  // Keep this file (it has the .job extension)
+  }
+  return 0;
 }
 
 static int entry_files(const char* dir, struct dirent* entry, char* in_path, char* out_path) {
@@ -203,7 +200,7 @@ static int run_job(int in_fd, int out_fd, char* filename) {
         int aux = kvs_backup(++file_backups, filename, jobs_directory);
 
         if (aux < 0) {
-            write_str(STDERR_FILENO, "Failed to do backup\n");
+          write_str(STDERR_FILENO, "Failed to do backup\n");
         } else if (aux == 1) {
           return 1;
         }
@@ -215,14 +212,14 @@ static int run_job(int in_fd, int out_fd, char* filename) {
 
       case CMD_HELP:
         write_str(STDOUT_FILENO,
-            "Available commands:\n"
-            "  WRITE [(key,value)(key2,value2),...]\n"
-            "  READ [key,key2,...]\n"
-            "  DELETE [key,key2,...]\n"
-            "  SHOW\n"
-            "  WAIT <delay_ms>\n"
-            "  BACKUP\n" // Not implemented
-            "  HELP\n");
+                  "Available commands:\n"
+                  "  WRITE [(key,value)(key2,value2),...]\n"
+                  "  READ [key,key2,...]\n"
+                  "  DELETE [key,key2,...]\n"
+                  "  SHOW\n"
+                  "  WAIT <delay_ms>\n"
+                  "  BACKUP\n"  // Not implemented
+                  "  HELP\n");
 
         break;
 
@@ -236,14 +233,14 @@ static int run_job(int in_fd, int out_fd, char* filename) {
   }
 }
 
-//frees arguments
+// frees arguments
 static void* get_file(void* arguments) {
   if (pthread_sigmask(SIG_BLOCK, &set_with_sigusr1, NULL) != 0) {
     perror("pthread_sigmask");
     return NULL;
   }
 
-  struct SharedData* thread_data = (struct SharedData*) arguments;
+  struct SharedData* thread_data = (struct SharedData*)arguments;
   DIR* dir = thread_data->dir;
   char* dir_name = thread_data->dir_name;
 
@@ -308,61 +305,57 @@ static void* get_file(void* arguments) {
   pthread_exit(NULL);
 }
 
-void assing_pipe_data(struct PipeData* buffer,size_t index,char* pipes_path){
-//está com um char a mais por alguma razao
+void assing_pipe_data(struct PipeData* buffer, size_t index, char* pipes_path) {
+  // está com um char a mais por alguma razao
 
-  strncpy(buffer[index].req_pipe_path,pipes_path,MAX_PIPE_PATH_LENGTH);
-  strncpy(buffer[index].resp_pipe_path,pipes_path + MAX_PIPE_PATH_LENGTH,MAX_PIPE_PATH_LENGTH);
-  strncpy(buffer[index].notif_pipe_path,pipes_path + (2*MAX_PIPE_PATH_LENGTH),MAX_PIPE_PATH_LENGTH);
+  strncpy(buffer[index].req_pipe_path, pipes_path, MAX_PIPE_PATH_LENGTH);
+  strncpy(buffer[index].resp_pipe_path, pipes_path + MAX_PIPE_PATH_LENGTH, MAX_PIPE_PATH_LENGTH);
+  strncpy(buffer[index].notif_pipe_path, pipes_path + (2 * MAX_PIPE_PATH_LENGTH), MAX_PIPE_PATH_LENGTH);
   return;
 }
 
-
-static void *managing_clients(void* arguments) {
-  struct ManagingClients* buffer_data = (struct ManagingClients*) arguments;
-  char buffer[1 + MAX_PIPE_PATH_LENGTH * 3]; //OP_CODE + 3 pipe paths
+static void* managing_clients(void* arguments) {
+  struct ManagingClients* buffer_data = (struct ManagingClients*)arguments;
+  char buffer[1 + MAX_PIPE_PATH_LENGTH * 3];  // OP_CODE + 3 pipe paths
   size_t write_index = 0;
-  //Handle SIGUSR1
+  // Handle SIGUSR1
   if (signal(SIGUSR1, sigusr1_handler) == SIG_ERR) {
     perror("signal");
     return NULL;
   }
 
-  //Is allways reading from the FIFO waiting for a client to connect
-  while (1){
-    if(signal_received == 1){
+  // Is allways reading from the FIFO waiting for a client to connect
+  while (1) {
+    if (signal_received == 1) {
       close_all_clients();
-      //disconnect all is not async signal safe, so we need to call it here
+      // disconnect all is not async signal safe, so we need to call it here
       disconnect_all();
       break;
     }
-    while(read_all(buffer_data->fifo_fd, buffer, sizeof(buffer), NULL) != 1); 
+    while (read_all(buffer_data->fifo_fd, buffer, sizeof(buffer), NULL) != 1);
 
-
-    if(get_code(buffer[0]) == OP_CODE_CONNECT){
+    if (get_code(buffer[0]) == OP_CODE_CONNECT) {
       sem_wait(&productor_buffer);
 
       pthread_mutex_lock(&semExMut);
 
-      assing_pipe_data(buffer_data->buffer,write_index,buffer + 1);
-      write_index = (write_index + 1)% MAX_CLIENTS; 
+      assing_pipe_data(buffer_data->buffer, write_index, buffer + 1);
+      write_index = (write_index + 1) % MAX_CLIENTS;
       pthread_mutex_unlock(&semExMut);
 
       sem_post(&consumer_buffer);
     }
-
-
   }
   close(buffer_data->fifo_fd);
   pthread_exit(NULL);
 }
 
-static void *client_thread(void *arguments){
+static void* client_thread(void* arguments) {
   if (pthread_sigmask(SIG_BLOCK, &set_with_sigusr1, NULL) != 0) {
     perror("pthread_sigmask");
     return NULL;
   }
-  struct ManagingClients* buffer_data = (struct ManagingClients*) arguments;
+  struct ManagingClients* buffer_data = (struct ManagingClients*)arguments;
   char req_pipe_path[MAX_PIPE_PATH_LENGTH];
   char resp_pipe_path[MAX_PIPE_PATH_LENGTH];
   char notif_pipe_path[MAX_PIPE_PATH_LENGTH];
@@ -370,89 +363,86 @@ static void *client_thread(void *arguments){
   int resp_pipe_fd;
   int notif_pipe_fd;
 
-  char op_buffer[1]; //OP_CODE + space
-  char key[MAX_STRING_SIZE + 1]; //key + \0
-  char resp_buffer[2]; //OP_CODE + space + result + \0
-  char result = '0';//it starts at 0 because of the connect
+  char op_buffer[1];              // OP_CODE + space
+  char key[MAX_STRING_SIZE + 1];  // key + \0
+  char resp_buffer[2];            // OP_CODE + space + result + \0
+  char result = '0';              // it starts at 0 because of the connect
   int disconnect_flag;
 
+  while (1) {
+    // PRINTF("CLIENT THREAD\n"); para ver se as threads voltam depois do sigurs1
+    // readMsg function ---------------------------
+    disconnect_flag = 0;
+    sem_wait(&consumer_buffer);
 
+    pthread_mutex_lock(&semExMut);
 
-  while(1){
-  //PRINTF("CLIENT THREAD\n"); para ver se as threads voltam depois do sigurs1
-  //readMsg function ---------------------------
-  disconnect_flag = 0;
-  sem_wait(&consumer_buffer);
-  
-  pthread_mutex_lock(&semExMut);
+    strncpy(req_pipe_path, buffer_data->buffer[*(buffer_data->read_index)].req_pipe_path, MAX_PIPE_PATH_LENGTH);
+    strncpy(resp_pipe_path, buffer_data->buffer[*(buffer_data->read_index)].resp_pipe_path, MAX_PIPE_PATH_LENGTH);
+    strncpy(notif_pipe_path, buffer_data->buffer[*(buffer_data->read_index)].notif_pipe_path, MAX_PIPE_PATH_LENGTH);
 
-  strncpy(req_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].req_pipe_path,MAX_PIPE_PATH_LENGTH);
-  strncpy(resp_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].resp_pipe_path,MAX_PIPE_PATH_LENGTH);
-  strncpy(notif_pipe_path,buffer_data->buffer[*(buffer_data->read_index)].notif_pipe_path,MAX_PIPE_PATH_LENGTH);
+    *(buffer_data->read_index) = (*(buffer_data->read_index) + 1) % MAX_CLIENTS;
 
-  *(buffer_data->read_index) = (*(buffer_data->read_index) + 1) % MAX_CLIENTS;
+    pthread_mutex_unlock(&semExMut);
 
-  pthread_mutex_unlock(&semExMut);
+    sem_post(&productor_buffer);
 
-  sem_post(&productor_buffer);
+    //--------------------------------------------
 
-  //--------------------------------------------
+    //------Connecting function--------------------------
 
-  //------Connecting function--------------------------
+    req_pipe_fd = open(req_pipe_path, O_RDONLY);
+    resp_pipe_fd = open(resp_pipe_path, O_WRONLY);
+    notif_pipe_fd = open(notif_pipe_path, O_WRONLY);  // falta testar se os opens correram bem
 
-  req_pipe_fd = open(req_pipe_path, O_RDONLY);
-  resp_pipe_fd = open(resp_pipe_path, O_WRONLY);
-  notif_pipe_fd = open(notif_pipe_path, O_WRONLY); //falta testar se os opens correram bem
-  
-  resp_buffer[0] = get_code_string(OP_CODE_CONNECT);
-  resp_buffer[1] = result; 
-  write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer));
+    resp_buffer[0] = get_code_string(OP_CODE_CONNECT);
+    resp_buffer[1] = result;
+    write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer));
 
-  int index;
-  for(index = 0; index < MAX_CLIENTS; index++){
-    if(active_clients[index].req_fd == 0){ 
-      
-      active_clients[index].req_fd = req_pipe_fd;
-      strcpy(active_clients[index].req_pipe_path,req_pipe_path);
-      active_clients[index].resp_fd = resp_pipe_fd;
-      strcpy(active_clients[index].resp_pipe_path,resp_pipe_path);
-      active_clients[index].notif_fd = notif_pipe_fd;
-      strcpy(active_clients[index].notif_pipe_path,notif_pipe_path);
-      break;
+    int index;
+    for (index = 0; index < MAX_CLIENTS; index++) {
+      if (active_clients[index].req_fd == 0) {
+        active_clients[index].req_fd = req_pipe_fd;
+        strcpy(active_clients[index].req_pipe_path, req_pipe_path);
+        active_clients[index].resp_fd = resp_pipe_fd;
+        strcpy(active_clients[index].resp_pipe_path, resp_pipe_path);
+        active_clients[index].notif_fd = notif_pipe_fd;
+        strcpy(active_clients[index].notif_pipe_path, notif_pipe_path);
+        break;
+      }
     }
-  }
 
-  //-------------------------------------------------------------------------------------
-    //while the client is connected
+    //-------------------------------------------------------------------------------------
+    // while the client is connected
 
-    while(!disconnect_flag){
-      //read from the request pipe until we get a valid operation
-      while(read_all(req_pipe_fd, op_buffer, sizeof(op_buffer), NULL) != 1){
-        if(errno == EBADF){
+    while (!disconnect_flag) {
+      // read from the request pipe until we get a valid operation
+      while (read_all(req_pipe_fd, op_buffer, sizeof(op_buffer), NULL) != 1) {
+        if (errno == EBADF) {
           disconnect_flag = 1;
           break;
         }
       }
-      //if a SIGUSR1 was sent to the server we break the loop
+      // if a SIGUSR1 was sent to the server we break the loop
 
       enum Code op_code = get_code(op_buffer[0]);
-      switch (op_code){
+      switch (op_code) {
         case OP_CODE_SUBSCRIBE:
-          //if read_all fails beacuse of no file descriptor it needs to break the loop
-          if(read_all(req_pipe_fd,key,sizeof(key),NULL) == -1){
-            if(errno == EBADF){
+          // if read_all fails beacuse of no file descriptor it needs to break the loop
+          if (read_all(req_pipe_fd, key, sizeof(key), NULL) == -1) {
+            if (errno == EBADF) {
               disconnect_flag = 1;
               break;
             }
             pthread_exit(NULL);
           }
-          
+
           result = subscribe(key, notif_pipe_fd);
           resp_buffer[0] = get_code_string(OP_CODE_SUBSCRIBE);
           resp_buffer[1] = result;
-          //fazer condição para quando o errno nao é EBADF
-          if(write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer)) == -1){
-            if(errno == EBADF){
+          // fazer condição para quando o errno nao é EBADF
+          if (write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer)) == -1) {
+            if (errno == EBADF) {
               disconnect_flag = 1;
               break;
             }
@@ -462,8 +452,8 @@ static void *client_thread(void *arguments){
           break;
 
         case OP_CODE_UNSUBSCRIBE:
-          if(read_all(req_pipe_fd,key,sizeof(key),NULL) == -1){
-            if(errno == EBADF){
+          if (read_all(req_pipe_fd, key, sizeof(key), NULL) == -1) {
+            if (errno == EBADF) {
               disconnect_flag = 1;
               break;
             }
@@ -472,8 +462,8 @@ static void *client_thread(void *arguments){
           result = unsubscribe(key, notif_pipe_fd);
           resp_buffer[0] = get_code_string(OP_CODE_UNSUBSCRIBE);
           resp_buffer[1] = result;
-          if(write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer)) == -1){
-            if(errno == EBADF){
+          if (write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer)) == -1) {
+            if (errno == EBADF) {
               disconnect_flag = 1;
               break;
             }
@@ -483,7 +473,7 @@ static void *client_thread(void *arguments){
           break;
 
         case OP_CODE_DISCONNECT:
-          
+
           result = disconnect(notif_pipe_fd);
 
           active_clients[index].req_fd = 0;
@@ -493,8 +483,8 @@ static void *client_thread(void *arguments){
           resp_buffer[0] = get_code_string(OP_CODE_DISCONNECT);
           resp_buffer[1] = result;
 
-          if(write_all(resp_pipe_fd,resp_buffer,sizeof(resp_buffer)) == -1){
-            if(errno == EBADF){
+          if (write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer)) == -1) {
+            if (errno == EBADF) {
               disconnect_flag = 1;
               break;
             }
@@ -507,24 +497,24 @@ static void *client_thread(void *arguments){
           unlink(notif_pipe_path);
           close(resp_pipe_fd);
           unlink(resp_pipe_path);
-          //go back to the main loop
+          // go back to the main loop
           disconnect_flag = 1;
           break;
         case OP_CODE_INVALID:
-          fprintf(stderr,"Invalid operation\n");
+          fprintf(stderr, "Invalid operation\n");
           break;
         case OP_CODE_CONNECT:
-          fprintf(stderr,"Invalid operation\n");
+          fprintf(stderr, "Invalid operation\n");
           break;
       }
-    }          
+    }
   }
   pthread_exit(NULL);
 }
 
-static void dispatch_threads(DIR* dir,struct ManagingClients* buffer_data) {
+static void dispatch_threads(DIR* dir, struct ManagingClients* buffer_data) {
   pthread_t* threads = malloc(max_threads * sizeof(pthread_t));
-  //create the host thread
+  // create the host thread
   pthread_t* host_thread = malloc(sizeof(pthread_t));
 
   pthread_t* client_threads = malloc(MAX_CLIENTS * sizeof(pthread_t));
@@ -535,19 +525,18 @@ static void dispatch_threads(DIR* dir,struct ManagingClients* buffer_data) {
 
   struct SharedData thread_data = {dir, jobs_directory, PTHREAD_MUTEX_INITIALIZER};
 
-
   for (size_t i = 0; i < max_threads; i++) {
     if (pthread_create(&threads[i], NULL, get_file, (void*)&thread_data) != 0) {
       fprintf(stderr, "Failed to create thread %zu\n", i);
       pthread_mutex_destroy(&thread_data.directory_mutex);
-        free(threads);
-        free(host_thread);
-        free(client_threads);
+      free(threads);
+      free(host_thread);
+      free(client_threads);
       return;
     }
   }
-  //dispatching the host thread TODO IT IS NOT CORRECT
-  if(pthread_create(host_thread, NULL, managing_clients, (void*)buffer_data) != 0) {
+  // dispatching the host thread TODO IT IS NOT CORRECT
+  if (pthread_create(host_thread, NULL, managing_clients, (void*)buffer_data) != 0) {
     fprintf(stderr, "Failed to create host thread\n");
     pthread_mutex_destroy(&thread_data.directory_mutex);
     free(threads);
@@ -556,8 +545,8 @@ static void dispatch_threads(DIR* dir,struct ManagingClients* buffer_data) {
     return;
   }
 
-  for(size_t i = 0; i < MAX_CLIENTS; i++) {
-    if(pthread_create(&client_threads[i], NULL, client_thread , (void*)buffer_data) != 0) {
+  for (size_t i = 0; i < MAX_CLIENTS; i++) {
+    if (pthread_create(&client_threads[i], NULL, client_thread, (void*)buffer_data) != 0) {
       fprintf(stderr, "Failed to create client thread\n");
       pthread_mutex_destroy(&thread_data.directory_mutex);
       free(threads);
@@ -597,7 +586,6 @@ static void dispatch_threads(DIR* dir,struct ManagingClients* buffer_data) {
       return;
     }
   }
-  
 
   if (pthread_mutex_destroy(&thread_data.directory_mutex) != 0) {
     fprintf(stderr, "Failed to destroy directory_mutex\n");
@@ -608,10 +596,10 @@ static void dispatch_threads(DIR* dir,struct ManagingClients* buffer_data) {
   free(client_threads);
 }
 
-int requests_buffer_init(struct ManagingClients* buffer,char* fifo_name) {
+int requests_buffer_init(struct ManagingClients* buffer, char* fifo_name) {
   int fifo_fd;
 
-   if (unlink(fifo_name) != 0 && errno != ENOENT) {
+  if (unlink(fifo_name) != 0 && errno != ENOENT) {
     return 1;
   }
 
@@ -626,10 +614,10 @@ int requests_buffer_init(struct ManagingClients* buffer,char* fifo_name) {
   }
 
   buffer->fifo_fd = fifo_fd;
-  buffer->read_index = malloc(sizeof(size_t)); //MALOC TEMOS DE DAR FREE
-  *(buffer->read_index)= 0;
+  buffer->read_index = malloc(sizeof(size_t));  // MALOC TEMOS DE DAR FREE
+  *(buffer->read_index) = 0;
 
-  for(int i = 0; i < MAX_CLIENTS; i++){
+  for (int i = 0; i < MAX_CLIENTS; i++) {
     active_clients[i].req_fd = 0;
     active_clients[i].resp_fd = 0;
     active_clients[i].notif_fd = 0;
@@ -637,20 +625,19 @@ int requests_buffer_init(struct ManagingClients* buffer,char* fifo_name) {
   return 0;
 }
 
-
 int main(int argc, char** argv) {
   if (argc != 5) {
     write_str(STDERR_FILENO, "Usage: ");
     write_str(STDERR_FILENO, argv[0]);
     write_str(STDERR_FILENO, " <jobs_dir>");
-		write_str(STDERR_FILENO, " <max_threads>");
-		write_str(STDERR_FILENO, " <max_backups> \n");
+    write_str(STDERR_FILENO, " <max_threads>");
+    write_str(STDERR_FILENO, " <max_backups> \n");
     write_str(STDERR_FILENO, "  <register_FIFO_name>\n");
     return 1;
   }
 
   jobs_directory = argv[1];
-  struct ManagingClients buffer_data; //struct to create the write/reading buffer
+  struct ManagingClients buffer_data;  // struct to create the write/reading buffer
   char* endptr;
   max_backups = strtoul(argv[3], &endptr, 10);
 
@@ -666,26 +653,26 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-	if (max_backups <= 0) {
-		write_str(STDERR_FILENO, "Invalid number of backups\n");
-		return 0;
-	}
+  if (max_backups <= 0) {
+    write_str(STDERR_FILENO, "Invalid number of backups\n");
+    return 0;
+  }
 
-	if (max_threads <= 0) {
-		write_str(STDERR_FILENO, "Invalid number of threads\n");
-		return 0;
-	}
+  if (max_threads <= 0) {
+    write_str(STDERR_FILENO, "Invalid number of threads\n");
+    return 0;
+  }
 
-  if((requests_buffer_init(&buffer_data,argv[4])) != 0) {
+  if ((requests_buffer_init(&buffer_data, argv[4])) != 0) {
     write_str(STDERR_FILENO, "Failed to initialize FIFO\n");
     return 1;
   }
 
-  //initialize the semaphore
+  // initialize the semaphore
   sem_init(&productor_buffer, 0, MAX_CLIENTS);
   sem_init(&consumer_buffer, 0, 0);
 
-  //initialize the global sigset
+  // initialize the global sigset
   initialize_global_sigset();
 
   if (kvs_init()) {
@@ -698,7 +685,7 @@ int main(int argc, char** argv) {
     fprintf(stderr, "Failed to open directory: %s\n", argv[1]);
     return 0;
   }
-  //WARNING: NAO SEI SE PRECISO DE PASSAR MAIS DO QUE O NOME DO FIFO
+  // WARNING: NAO SEI SE PRECISO DE PASSAR MAIS DO QUE O NOME DO FIFO
   dispatch_threads(dir, &buffer_data);
 
   if (closedir(dir) == -1) {

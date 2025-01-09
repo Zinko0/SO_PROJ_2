@@ -10,8 +10,6 @@
 #include "src/common/constants.h"
 #include "src/common/io.h"
 
-
-
 int main(int argc, char* argv[]) {
   if (argc != 3) {
     fprintf(stderr, "Usage: %s <client_unique_id> <register_pipe_path>\n", argv[0]);
@@ -30,8 +28,8 @@ int main(int argc, char* argv[]) {
   strncat(req_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
   strncat(resp_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
   strncat(notif_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
-  
-  if((kvs_connect(req_pipe_path, resp_pipe_path, argv[2], notif_pipe_path)) != 0) {
+
+  if ((kvs_connect(req_pipe_path, resp_pipe_path, argv[2], notif_pipe_path)) != 0) {
     fprintf(stderr, "Failed to connect to the server\n");
     return 1;
   }
@@ -48,7 +46,7 @@ int main(int argc, char* argv[]) {
           pthread_join(notif_thread, NULL);
           return 1;
         }
-        
+
         connected = 0;
         pthread_join(notif_thread, NULL);
         printf("Disconnected from server\n");
@@ -60,10 +58,10 @@ int main(int argc, char* argv[]) {
           fprintf(stderr, "Invalid command. See HELP for usage\n");
           continue;
         }
-         
+
         if (kvs_subscribe(keys[0])) {
-            fprintf(stderr, "Command subscribe failed\n");
-            connected = 0;
+          fprintf(stderr, "Command subscribe failed\n");
+          connected = 0;
         }
 
         break;
@@ -74,10 +72,10 @@ int main(int argc, char* argv[]) {
           fprintf(stderr, "Invalid command. See HELP for usage\n");
           continue;
         }
-         
+
         if (kvs_unsubscribe(keys[0])) {
-            fprintf(stderr, "Command subscribe failed\n");
-            connected = 0;
+          fprintf(stderr, "Command subscribe failed\n");
+          connected = 0;
         }
 
         break;
@@ -89,8 +87,8 @@ int main(int argc, char* argv[]) {
         }
 
         if (delay_ms > 0) {
-            printf("Waiting...\n");
-            delay(delay_ms);
+          printf("Waiting...\n");
+          delay(delay_ms);
         }
         break;
 
@@ -110,7 +108,7 @@ int main(int argc, char* argv[]) {
   unlink(req_pipe_path);
   unlink(resp_pipe_path);
   unlink(notif_pipe_path);
-  
+
   pthread_join(notif_thread, NULL);
   return 0;
 }

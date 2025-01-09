@@ -1,18 +1,19 @@
 #include "io.h"
+
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
-#include <sys/types.h>
-#include <fcntl.h>
-#include <sys/stat.h>
+
 #include "src/common/constants.h"
 #include "src/common/protocol.h"
- 
- 
+
 int read_all(int fd, void *buffer, size_t size, int *intr) {
   if (intr != NULL && *intr) {
     return -1;
@@ -39,7 +40,7 @@ int read_all(int fd, void *buffer, size_t size, int *intr) {
   }
   return 1;
 }
- 
+
 int read_string(int fd, char *str) {
   ssize_t bytes_read = 0;
   char ch;
@@ -55,7 +56,7 @@ int read_string(int fd, char *str) {
   str[bytes_read] = '\0';
   return (int)bytes_read;
 }
- 
+
 int write_all(int fd, const void *buffer, size_t size) {
   size_t bytes_written = 0;
   while (bytes_written < size) {
@@ -74,25 +75,25 @@ int write_all(int fd, const void *buffer, size_t size) {
 }
 
 static struct timespec delay_to_timespec(unsigned int delay_ms) {
-    return (struct timespec){delay_ms / 1000, (delay_ms % 1000) * 1000000};
+  return (struct timespec){delay_ms / 1000, (delay_ms % 1000) * 1000000};
 }
 
 void delay(unsigned int time_ms) {
-    struct timespec delay = delay_to_timespec(time_ms);
-    nanosleep(&delay, NULL);
+  struct timespec delay = delay_to_timespec(time_ms);
+  nanosleep(&delay, NULL);
 }
 
-int create_pipe(char const* pipe_path) {
-  //unlink pipe
-  if(unlink(pipe_path) != 0 && errno != ENOENT){
+int create_pipe(char const *pipe_path) {
+  // unlink pipe
+  if (unlink(pipe_path) != 0 && errno != ENOENT) {
     return -1;
   }
-  //create pipe
-  if(mkfifo(pipe_path, 0640) != 0){
+  // create pipe
+  if (mkfifo(pipe_path, 0640) != 0) {
     unlink(pipe_path);
     return -1;
   }
-  
+
   return 0;
 }
 

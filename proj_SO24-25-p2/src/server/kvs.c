@@ -1,195 +1,196 @@
 #include "kvs.h"
-#include "string.h"
+
 #include <ctype.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "src/common/io.h"
+#include "string.h"
 
 // Hash function based on key initial.
 // @param key Lowercase alphabetical string.
 // @return hash.
 // NOTE: This is not an ideal hash function, but is useful for test purposes of the project
 int hash(const char *key) {
-    int firstLetter = tolower(key[0]);
-    if (firstLetter >= 'a' && firstLetter <= 'z') {
-        return firstLetter - 'a';
-    } else if (firstLetter >= '0' && firstLetter <= '9') {
-        return firstLetter - '0';
-    }
-    return -1; // Invalid index for non-alphabetic or number strings
+  int firstLetter = tolower(key[0]);
+  if (firstLetter >= 'a' && firstLetter <= 'z') {
+    return firstLetter - 'a';
+  } else if (firstLetter >= '0' && firstLetter <= '9') {
+    return firstLetter - '0';
+  }
+  return -1;  // Invalid index for non-alphabetic or number strings
 }
 
-struct HashTable* create_hash_table() {
-	HashTable *ht = malloc(sizeof(HashTable));
-	if (!ht) return NULL;
-	for (int i = 0; i < TABLE_SIZE; i++) {
-		ht->table[i] = NULL;
-        if (pthread_rwlock_init(&ht->tablelock[i], NULL)!=0){
-            return NULL;
-        }
-	}
-	return ht;
+struct HashTable *create_hash_table() {
+  HashTable *ht = malloc(sizeof(HashTable));
+  if (!ht) return NULL;
+  for (int i = 0; i < TABLE_SIZE; i++) {
+    ht->table[i] = NULL;
+    if (pthread_rwlock_init(&ht->tablelock[i], NULL) != 0) {
+      return NULL;
+    }
+  }
+  return ht;
 }
 
 int write_subscription(HashTable *ht, const char *key, int fd) {
-    int index = hash(key);
+  int index = hash(key);
 
-    KeyNode *keyNode = ht->table[index];
-    KeyNode *previousNode;
+  KeyNode *keyNode = ht->table[index];
+  KeyNode *previousNode;
 
-    while (keyNode != NULL) {
-        if (strcmp(keyNode->key, key) == 0) {
-            // Key found; add the subscriber
-            for (int i = 0; i < MAX_CLIENTS; i++) {
-                if (keyNode->subscribers_fds[i] == 0) {
-                    keyNode->subscribers_fds[i] = fd;
-                    return 0;
-                }
-            }
-            return -1; // No space for more subscribers SHOULD NOT HAPPEN
+  while (keyNode != NULL) {
+    if (strcmp(keyNode->key, key) == 0) {
+      // Key found; add the subscriber
+      for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (keyNode->subscribers_fds[i] == 0) {
+          keyNode->subscribers_fds[i] = fd;
+          return 0;
         }
-        previousNode = keyNode;
-        keyNode = previousNode->next; // Move to the next node
+      }
+      return -1;  // No space for more subscribers SHOULD NOT HAPPEN
     }
-    return 1; // Key not found
+    previousNode = keyNode;
+    keyNode = previousNode->next;  // Move to the next node
+  }
+  return 1;  // Key not found
 }
 
 int write_pair(HashTable *ht, const char *key, const char *value) {
-    int index = hash(key);
+  int index = hash(key);
 
-    // Search for the key node
-	KeyNode *keyNode = ht->table[index];
-    KeyNode *previousNode;
+  // Search for the key node
+  KeyNode *keyNode = ht->table[index];
+  KeyNode *previousNode;
 
-    while (keyNode != NULL) {
-        if (strcmp(keyNode->key, key) == 0) {
-            // overwrite value
-            free(keyNode->value);
-            keyNode->value = strdup(value);
-            // Notify subscribers
-            for(int i = 0; i < MAX_CLIENTS; i++) {
-                if (keyNode->subscribers_fds[i] != 0) {
-                    char str[(MAX_STRING_SIZE + 1) * 2];
-                    memset(str, 0, sizeof(str));
-                    strncpy(str, key, strlen(key));
-                    strncpy(str + MAX_STRING_SIZE + 1, value, strlen(value));
-                    write_all(keyNode->subscribers_fds[i], str, sizeof(str));
-                }
-            }
-            return 0;
+  while (keyNode != NULL) {
+    if (strcmp(keyNode->key, key) == 0) {
+      // overwrite value
+      free(keyNode->value);
+      keyNode->value = strdup(value);
+      // Notify subscribers
+      for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (keyNode->subscribers_fds[i] != 0) {
+          char str[(MAX_STRING_SIZE + 1) * 2];
+          memset(str, 0, sizeof(str));
+          strncpy(str, key, strlen(key));
+          strncpy(str + MAX_STRING_SIZE + 1, value, strlen(value));
+          write_all(keyNode->subscribers_fds[i], str, sizeof(str));
         }
-        previousNode = keyNode;
-        keyNode = previousNode->next; // Move to the next node
+      }
+      return 0;
     }
-    // Key not found, create a new key node
-    keyNode = malloc(sizeof(KeyNode));
-    keyNode->key = strdup(key); // Allocate memory for the key
-    keyNode->value = strdup(value); // Allocate memory for the value
-    keyNode->next = ht->table[index]; // Link to existing nodes
-    ht->table[index] = keyNode; // Place new key node at the start of the list
-    for(int i = 0; i < MAX_CLIENTS; i++) {
-        keyNode->subscribers_fds[i] = 0;
-    }
-    return 0;
+    previousNode = keyNode;
+    keyNode = previousNode->next;  // Move to the next node
+  }
+  // Key not found, create a new key node
+  keyNode = malloc(sizeof(KeyNode));
+  keyNode->key = strdup(key);        // Allocate memory for the key
+  keyNode->value = strdup(value);    // Allocate memory for the value
+  keyNode->next = ht->table[index];  // Link to existing nodes
+  ht->table[index] = keyNode;        // Place new key node at the start of the list
+  for (int i = 0; i < MAX_CLIENTS; i++) {
+    keyNode->subscribers_fds[i] = 0;
+  }
+  return 0;
 }
 
-char* read_pair(HashTable *ht, const char *key) {
-    int index = hash(key);
+char *read_pair(HashTable *ht, const char *key) {
+  int index = hash(key);
 
-	KeyNode *keyNode = ht->table[index];
-    KeyNode *previousNode;
-    char *value;
+  KeyNode *keyNode = ht->table[index];
+  KeyNode *previousNode;
+  char *value;
 
-    while (keyNode != NULL) {
-        if (strcmp(keyNode->key, key) == 0) {
-            value = strdup(keyNode->value);
-            return value; // Return the value if found
-        }
-        previousNode = keyNode;
-        keyNode = previousNode->next; // Move to the next node
+  while (keyNode != NULL) {
+    if (strcmp(keyNode->key, key) == 0) {
+      value = strdup(keyNode->value);
+      return value;  // Return the value if found
     }
+    previousNode = keyNode;
+    keyNode = previousNode->next;  // Move to the next node
+  }
 
-    return NULL; // Key not found
+  return NULL;  // Key not found
 }
 
 int delete_subscription(HashTable *ht, const char *key, int fd) {
-    int index = hash(key);
+  int index = hash(key);
 
-    KeyNode *keyNode = ht->table[index];
-    KeyNode *previousNode;
+  KeyNode *keyNode = ht->table[index];
+  KeyNode *previousNode;
 
-    while (keyNode != NULL) {
-        if (strcmp(keyNode->key, key) == 0) {
-            // Key found; delete the subscriber
-            for (int i = 0; i < MAX_CLIENTS; i++) {
-                if (keyNode->subscribers_fds[i] == fd) {
-                    keyNode->subscribers_fds[i] = 0;
-                    return 0;
-                }
-            }
-            return 1; // No subscriber to delete
+  while (keyNode != NULL) {
+    if (strcmp(keyNode->key, key) == 0) {
+      // Key found; delete the subscriber
+      for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (keyNode->subscribers_fds[i] == fd) {
+          keyNode->subscribers_fds[i] = 0;
+          return 0;
         }
-        previousNode = keyNode;
-        keyNode = previousNode->next; // Move to the next node
+      }
+      return 1;  // No subscriber to delete
     }
-    return 1; // Key not found
+    previousNode = keyNode;
+    keyNode = previousNode->next;  // Move to the next node
+  }
+  return 1;  // Key not found
 }
 
 int delete_pair(HashTable *ht, const char *key) {
-    int index = hash(key);
+  int index = hash(key);
 
-    // Search for the key node
-    KeyNode *keyNode = ht->table[index];
-    KeyNode *prevNode = NULL;
+  // Search for the key node
+  KeyNode *keyNode = ht->table[index];
+  KeyNode *prevNode = NULL;
 
-    while (keyNode != NULL) {
-        if (strcmp(keyNode->key, key) == 0) {
-            for(int i = 0; i < MAX_CLIENTS; i++) {
-                if (keyNode->subscribers_fds[i] != 0) {
-                    char str[(MAX_STRING_SIZE+1)*2];
-                    char deleted[] = "DELETED";
-                    memset(str, 0, sizeof(str));
-                    strncpy(str, key, (strlen(key)) * sizeof(char));
-                    strncpy(str + MAX_STRING_SIZE + 1, deleted, strlen(deleted)* sizeof(char));
-                    write_all(keyNode->subscribers_fds[i], str, sizeof(str));
-                }
-            }
-            // Key found; delete this node
-            if (prevNode == NULL) {
-                // Node to delete is the first node in the list
-                ht->table[index] = keyNode->next; // Update the table to point to the next node
-            } else {
-                // Node to delete is not the first; bypass it
-                prevNode->next = keyNode->next; // Link the previous node to the next node
-            }
-            // Free the memory allocated for the key and value
-            free(keyNode->key);
-            free(keyNode->value);
-            free(keyNode); // Free the key node itself
-            return 0; // Exit the function
+  while (keyNode != NULL) {
+    if (strcmp(keyNode->key, key) == 0) {
+      for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (keyNode->subscribers_fds[i] != 0) {
+          char str[(MAX_STRING_SIZE + 1) * 2];
+          char deleted[] = "DELETED";
+          memset(str, 0, sizeof(str));
+          strncpy(str, key, (strlen(key)) * sizeof(char));
+          strncpy(str + MAX_STRING_SIZE + 1, deleted, strlen(deleted) * sizeof(char));
+          write_all(keyNode->subscribers_fds[i], str, sizeof(str));
         }
-        prevNode = keyNode; // Move prevNode to current node
-        keyNode = keyNode->next; // Move to the next node
+      }
+      // Key found; delete this node
+      if (prevNode == NULL) {
+        // Node to delete is the first node in the list
+        ht->table[index] = keyNode->next;  // Update the table to point to the next node
+      } else {
+        // Node to delete is not the first; bypass it
+        prevNode->next = keyNode->next;  // Link the previous node to the next node
+      }
+      // Free the memory allocated for the key and value
+      free(keyNode->key);
+      free(keyNode->value);
+      free(keyNode);  // Free the key node itself
+      return 0;       // Exit the function
     }
+    prevNode = keyNode;       // Move prevNode to current node
+    keyNode = keyNode->next;  // Move to the next node
+  }
 
-    return 1;
+  return 1;
 }
 
 void free_table(HashTable *ht) {
-    for (int i = 0; i < TABLE_SIZE; i++) {
-        KeyNode *keyNode = ht->table[i];
-        while (keyNode != NULL) {
-            KeyNode *temp = keyNode;
-            keyNode = keyNode->next;
-            free(temp->key);
-            free(temp->value);
-            free(temp);
-        }
+  for (int i = 0; i < TABLE_SIZE; i++) {
+    KeyNode *keyNode = ht->table[i];
+    while (keyNode != NULL) {
+      KeyNode *temp = keyNode;
+      keyNode = keyNode->next;
+      free(temp->key);
+      free(temp->value);
+      free(temp);
     }
-    for(int i = 0; i < TABLE_SIZE; i++) {
-        pthread_rwlock_destroy(&ht->tablelock[i]);
-    }
-    free(ht);
+  }
+  for (int i = 0; i < TABLE_SIZE; i++) {
+    pthread_rwlock_destroy(&ht->tablelock[i]);
+  }
+  free(ht);
 }
