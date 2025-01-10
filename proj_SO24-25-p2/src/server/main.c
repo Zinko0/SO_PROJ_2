@@ -235,10 +235,7 @@ static int run_job(int in_fd, int out_fd, char* filename) {
 
 // frees arguments
 static void* get_file(void* arguments) {
-  if (pthread_sigmask(SIG_BLOCK, &set_with_sigusr1, NULL) != 0) {
-    perror("pthread_sigmask");
-    return NULL;
-  }
+
 
   struct SharedData* thread_data = (struct SharedData*)arguments;
   DIR* dir = thread_data->dir;
@@ -318,8 +315,13 @@ static void* managing_clients(void* arguments) {
   struct ManagingClients* buffer_data = (struct ManagingClients*)arguments;
   char buffer[1 + MAX_PIPE_PATH_LENGTH * 3];  // OP_CODE + 3 pipe paths
   size_t write_index = 0;
-  // Handle SIGUSR1
-  if (signal(SIGUSR1, sigusr1_handler) == SIG_ERR) {
+  //Handle SIGUSR1
+  if(pthread_sigmask(SIG_UNBLOCK, &set_with_sigusr1, NULL) != 0){
+    perror("pthread_sigmask");
+    return NULL;
+  }
+
+  if (sigaction(SIGUSR1, sigusr1_handler) == SIG_ERR) {
     perror("signal");
     return NULL;
   }
@@ -350,12 +352,12 @@ static void* managing_clients(void* arguments) {
   pthread_exit(NULL);
 }
 
-static void* client_thread(void* arguments) {
+static void *client_thread(void *arguments){
   if (pthread_sigmask(SIG_BLOCK, &set_with_sigusr1, NULL) != 0) {
     perror("pthread_sigmask");
     return NULL;
   }
-  struct ManagingClients* buffer_data = (struct ManagingClients*)arguments;
+  struct ManagingClients* buffer_data = (struct ManagingClients*) arguments;
   char req_pipe_path[MAX_PIPE_PATH_LENGTH];
   char resp_pipe_path[MAX_PIPE_PATH_LENGTH];
   char notif_pipe_path[MAX_PIPE_PATH_LENGTH];
@@ -641,6 +643,13 @@ int main(int argc, char** argv) {
   char* endptr;
   max_backups = strtoul(argv[3], &endptr, 10);
 
+  //initialize the global sigset
+  initialize_global_sigset();
+
+  if (pthread_sigmask(SIG_BLOCK, &set_with_sigusr1, NULL) != 0) {
+    perror("pthread_sigmask not successful");
+    return NULL;
+  }
   if (*endptr != '\0') {
     fprintf(stderr, "Invalid max_proc value\n");
     return 1;
@@ -672,7 +681,7 @@ int main(int argc, char** argv) {
   sem_init(&productor_buffer, 0, MAX_CLIENTS);
   sem_init(&consumer_buffer, 0, 0);
 
-  // initialize the global sigset
+  //initialize the global sigset
   initialize_global_sigset();
 
   if (kvs_init()) {
