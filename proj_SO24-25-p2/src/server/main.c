@@ -340,8 +340,6 @@ static void* managing_clients(void* arguments) {
 
   // Is allways reading from the FIFO waiting for a client to connect
   while (1) {
-    sleep(1);
-    printf("in while\n");
     if (signal_received == 1) {
       printf("Received SIGUSR1 2\n\n\n");
       close_all_clients();
@@ -356,7 +354,16 @@ static void* managing_clients(void* arguments) {
         pthread_mutex_lock(&semExMut);
 
         assing_pipe_data(buffer_data->buffer, write_index, buffer + 1);
+        printf("MANAGER POV\n");
+        printf("index: %ld\n", write_index);
+        for (int i = 0; i < MAX_CLIENTS; i++){
+          printf("req: %s", buffer_data->buffer[i].req_pipe_path);
+          printf("resp: %s", buffer_data->buffer[i].resp_pipe_path);
+          printf("notif: %s\n", buffer_data->buffer[i].notif_pipe_path);
+        }
         write_index = (write_index + 1) % MAX_CLIENTS;
+
+
         pthread_mutex_unlock(&semExMut);
 
         sem_post(&consumer_buffer);
@@ -395,9 +402,14 @@ static void *client_thread(void *arguments){
     strncpy(req_pipe_path, buffer_data->buffer[*(buffer_data->read_index)].req_pipe_path, MAX_PIPE_PATH_LENGTH);
     strncpy(resp_pipe_path, buffer_data->buffer[*(buffer_data->read_index)].resp_pipe_path, MAX_PIPE_PATH_LENGTH);
     strncpy(notif_pipe_path, buffer_data->buffer[*(buffer_data->read_index)].notif_pipe_path, MAX_PIPE_PATH_LENGTH);
-
+    printf("CLIENT POV\n");
+    printf("index: %ld\n", *(buffer_data->read_index));
     *(buffer_data->read_index) = (*(buffer_data->read_index) + 1) % MAX_CLIENTS;
-
+    for(int i = 0; i < MAX_CLIENTS; i++){
+      printf("req: %s", buffer_data->buffer[i].req_pipe_path);
+      printf("resp: %s", buffer_data->buffer[i].resp_pipe_path);
+      printf("notif: %s\n", buffer_data->buffer[i].notif_pipe_path);
+    }
     pthread_mutex_unlock(&semExMut);
 
     sem_post(&productor_buffer);
@@ -432,96 +444,96 @@ static void *client_thread(void *arguments){
 
     while (!disconnect_flag) {
       // read from the request pipe until we get a valid operation
-      while (read_all(req_pipe_fd, op_buffer, sizeof(op_buffer), NULL) != 1) {
+      
+      if(read_all(req_pipe_fd, op_buffer, sizeof(op_buffer), NULL) != 1) {
         if (errno == EBADF) {
           disconnect_flag = 1;
           break;
         }
-      }
-      // if a SIGUSR1 was sent to the server we break the loop
-
-      enum Code op_code = get_code(op_buffer[0]);
-      switch (op_code) {
-        case OP_CODE_SUBSCRIBE:
-          // if read_all fails beacuse of no file descriptor it needs to break the loop
-          if (read_all(req_pipe_fd, key, sizeof(key), NULL) == -1) {
-            if (errno == EBADF) {
-              disconnect_flag = 1;
-              break;
+      }else{
+        enum Code op_code = get_code(op_buffer[0]);
+        switch (op_code) {
+          case OP_CODE_SUBSCRIBE:
+            // if read_all fails beacuse of no file descriptor it needs to break the loop
+            if (read_all(req_pipe_fd, key, sizeof(key), NULL) == -1) {
+              if (errno == EBADF) {
+                disconnect_flag = 1;
+                break;
+              }
+              pthread_exit(NULL);
             }
-            pthread_exit(NULL);
-          }
 
-          result = subscribe(key, notif_pipe_fd);
-          resp_buffer[0] = get_code_string(OP_CODE_SUBSCRIBE);
-          resp_buffer[1] = result;
-          // fazer condição para quando o errno nao é EBADF
-          if (write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer)) == -1) {
-            if (errno == EBADF) {
-              disconnect_flag = 1;
-              break;
+            result = subscribe(key, notif_pipe_fd);
+            resp_buffer[0] = get_code_string(OP_CODE_SUBSCRIBE);
+            resp_buffer[1] = result;
+            // fazer condição para quando o errno nao é EBADF
+            if (write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer)) == -1) {
+              if (errno == EBADF) {
+                disconnect_flag = 1;
+                break;
+              }
+              pthread_exit(NULL);
             }
-            pthread_exit(NULL);
-          }
 
-          break;
+            break;
 
-        case OP_CODE_UNSUBSCRIBE:
-          if (read_all(req_pipe_fd, key, sizeof(key), NULL) == -1) {
-            if (errno == EBADF) {
-              disconnect_flag = 1;
-              break;
+          case OP_CODE_UNSUBSCRIBE:
+            if (read_all(req_pipe_fd, key, sizeof(key), NULL) == -1) {
+              if (errno == EBADF) {
+                disconnect_flag = 1;
+                break;
+              }
+              pthread_exit(NULL);
             }
-            pthread_exit(NULL);
-          }
-          result = unsubscribe(key, notif_pipe_fd);
-          resp_buffer[0] = get_code_string(OP_CODE_UNSUBSCRIBE);
-          resp_buffer[1] = result;
-          if (write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer)) == -1) {
-            if (errno == EBADF) {
-              disconnect_flag = 1;
-              break;
+            result = unsubscribe(key, notif_pipe_fd);
+            resp_buffer[0] = get_code_string(OP_CODE_UNSUBSCRIBE);
+            resp_buffer[1] = result;
+            if (write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer)) == -1) {
+              if (errno == EBADF) {
+                disconnect_flag = 1;
+                break;
+              }
+              pthread_exit(NULL);
             }
-            pthread_exit(NULL);
-          }
 
-          break;
+            break;
 
-        case OP_CODE_DISCONNECT:
+          case OP_CODE_DISCONNECT:
 
-          result = disconnect(notif_pipe_fd);
+            result = disconnect(notif_pipe_fd);
 
-          active_clients[index].req_fd = 0;
-          active_clients[index].resp_fd = 0;
-          active_clients[index].notif_fd = 0;
+            active_clients[index].req_fd = 0;
+            active_clients[index].resp_fd = 0;
+            active_clients[index].notif_fd = 0;
 
-          resp_buffer[0] = get_code_string(OP_CODE_DISCONNECT);
-          resp_buffer[1] = result;
+            resp_buffer[0] = get_code_string(OP_CODE_DISCONNECT);
+            resp_buffer[1] = result;
 
-          if (write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer)) == -1) {
-            if (errno == EBADF) {
-              disconnect_flag = 1;
-              break;
+            if (write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer)) == -1) {
+              if (errno == EBADF) {
+                disconnect_flag = 1;
+                break;
+              }
+              pthread_exit(NULL);
             }
-            pthread_exit(NULL);
-          }
 
-          close(req_pipe_fd);
-          unlink(req_pipe_path);
-          close(notif_pipe_fd);
-          unlink(notif_pipe_path);
-          close(resp_pipe_fd);
-          unlink(resp_pipe_path);
-          // go back to the main loop
-          disconnect_flag = 1;
-          break;
-        case OP_CODE_INVALID:
-          fprintf(stderr, "Invalid operation\n");
-          break;
-        case OP_CODE_CONNECT:
-          fprintf(stderr, "Invalid operation\n");
-          break;
-      }
+            close(req_pipe_fd);
+            unlink(req_pipe_path);
+            close(notif_pipe_fd);
+            unlink(notif_pipe_path);
+            close(resp_pipe_fd);
+            unlink(resp_pipe_path);
+            // go back to the main loop
+            disconnect_flag = 1;
+            break;
+          case OP_CODE_INVALID:
+            fprintf(stderr, "Invalid operation\n");
+            break;
+          case OP_CODE_CONNECT:
+            fprintf(stderr, "Invalid operation\n");
+            break;
+        }
+      }     
     }
   }
   pthread_exit(NULL);
