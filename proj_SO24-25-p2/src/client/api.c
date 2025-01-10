@@ -177,7 +177,7 @@ void* kvs_get_notification(void* arg) {
 }
 
 void terminate() {
-  for (size_t i = 0; i < 4; i++) {
+  for (size_t i = 1; i < 4; i++) {
     close(filedesc[i]);
   }
   return;

@@ -385,7 +385,7 @@ static void *client_thread(void *arguments){
   int disconnect_flag;
 
   while (1) {
-    // PRINTF("CLIENT THREAD\n"); para ver se as threads voltam depois do sigurs1
+    printf("CLIENT THREAD A ESPERA\n"); //para ver se as threads voltam depois do sigurs1
     // readMsg function ---------------------------
     disconnect_flag = 0;
     sem_wait(&consumer_buffer);
