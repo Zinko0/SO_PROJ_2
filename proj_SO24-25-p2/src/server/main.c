@@ -92,6 +92,7 @@ static void sigusr1_handler(int signo) {
     exit(EXIT_FAILURE);
   }
   if (signo == SIGUSR1) {
+    printf("Received SIGUSR1\n\n\n\n\n");
     signal_received = 1;
   }
   return;
@@ -315,48 +316,60 @@ static void* managing_clients(void* arguments) {
   struct ManagingClients* buffer_data = (struct ManagingClients*)arguments;
   char buffer[1 + MAX_PIPE_PATH_LENGTH * 3];  // OP_CODE + 3 pipe paths
   size_t write_index = 0;
+  
+  struct sigaction sigaction_struct;
+  memset(&sigaction_struct, 0, sizeof(sigaction_struct));
+
+  sigaction_struct.sa_handler = sigusr1_handler;
+  sigemptyset(&sigaction_struct.sa_mask);
+  sigaction_struct.sa_flags = SA_RESTART;
+
+
   //Handle SIGUSR1
   if(pthread_sigmask(SIG_UNBLOCK, &set_with_sigusr1, NULL) != 0){
     perror("pthread_sigmask");
     return NULL;
   }
-
-  if (sigaction(SIGUSR1, sigusr1_handler) == SIG_ERR) {
+  //Sigaction to handle SIGUSR1 multiple times
+  if (sigaction(SIGUSR1, &sigaction_struct, NULL) != 0) {
     perror("signal");
     return NULL;
   }
 
+  printf("program id: %d\n", getpid());
+
   // Is allways reading from the FIFO waiting for a client to connect
   while (1) {
+    sleep(1);
+    printf("in while\n");
     if (signal_received == 1) {
+      printf("Received SIGUSR1 2\n\n\n");
       close_all_clients();
       // disconnect all is not async signal safe, so we need to call it here
       disconnect_all();
-      break;
+      signal_received = 0;
     }
-    while (read_all(buffer_data->fifo_fd, buffer, sizeof(buffer), NULL) != 1);
+    if (read_all(buffer_data->fifo_fd, buffer, sizeof(buffer), NULL) == 1){
+      if (get_code(buffer[0]) == OP_CODE_CONNECT) {
+        sem_wait(&productor_buffer);
 
-    if (get_code(buffer[0]) == OP_CODE_CONNECT) {
-      sem_wait(&productor_buffer);
+        pthread_mutex_lock(&semExMut);
 
-      pthread_mutex_lock(&semExMut);
+        assing_pipe_data(buffer_data->buffer, write_index, buffer + 1);
+        write_index = (write_index + 1) % MAX_CLIENTS;
+        pthread_mutex_unlock(&semExMut);
 
-      assing_pipe_data(buffer_data->buffer, write_index, buffer + 1);
-      write_index = (write_index + 1) % MAX_CLIENTS;
-      pthread_mutex_unlock(&semExMut);
-
-      sem_post(&consumer_buffer);
+        sem_post(&consumer_buffer);
+      }
     }
+
+    
   }
   close(buffer_data->fifo_fd);
   pthread_exit(NULL);
 }
 
 static void *client_thread(void *arguments){
-  if (pthread_sigmask(SIG_BLOCK, &set_with_sigusr1, NULL) != 0) {
-    perror("pthread_sigmask");
-    return NULL;
-  }
   struct ManagingClients* buffer_data = (struct ManagingClients*) arguments;
   char req_pipe_path[MAX_PIPE_PATH_LENGTH];
   char resp_pipe_path[MAX_PIPE_PATH_LENGTH];
@@ -648,7 +661,7 @@ int main(int argc, char** argv) {
 
   if (pthread_sigmask(SIG_BLOCK, &set_with_sigusr1, NULL) != 0) {
     perror("pthread_sigmask not successful");
-    return NULL;
+    return 1;
   }
   if (*endptr != '\0') {
     fprintf(stderr, "Invalid max_proc value\n");
