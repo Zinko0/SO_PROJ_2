@@ -304,7 +304,6 @@ static void* get_file(void* arguments) {
 }
 
 void assing_pipe_data(struct PipeData* buffer, size_t index, char* pipes_path) {
-  // está com um char a mais por alguma razao
 
   strncpy(buffer[index].req_pipe_path, pipes_path, MAX_PIPE_PATH_LENGTH);
   strncpy(buffer[index].resp_pipe_path, pipes_path + MAX_PIPE_PATH_LENGTH, MAX_PIPE_PATH_LENGTH);
@@ -376,71 +375,12 @@ static void* managing_clients(void* arguments) {
   pthread_exit(NULL);
 }
 
-static void *client_thread(void *arguments){
-  struct ManagingClients* buffer_data = (struct ManagingClients*) arguments;
-  char req_pipe_path[MAX_PIPE_PATH_LENGTH];
-  char resp_pipe_path[MAX_PIPE_PATH_LENGTH];
-  char notif_pipe_path[MAX_PIPE_PATH_LENGTH];
-  int req_pipe_fd;
-  int resp_pipe_fd;
-  int notif_pipe_fd;
-
+void run_client_requests(int req_pipe_fd, int resp_pipe_fd, int notif_pipe_fd, int index) {
   char op_buffer[1];              // OP_CODE + space
   char key[MAX_STRING_SIZE + 1];  // key + \0
-  char resp_buffer[2];            // OP_CODE + space + result + \0
-  char result = '0';              // it starts at 0 because of the connect
-  int disconnect_flag;
-
-  while (1) {
-    printf("CLIENT THREAD A ESPERA\n"); //para ver se as threads voltam depois do sigurs1
-    // readMsg function ---------------------------
-    disconnect_flag = 0;
-    sem_wait(&consumer_buffer);
-
-    pthread_mutex_lock(&semExMut);
-
-    strncpy(req_pipe_path, buffer_data->buffer[*(buffer_data->read_index)].req_pipe_path, MAX_PIPE_PATH_LENGTH);
-    strncpy(resp_pipe_path, buffer_data->buffer[*(buffer_data->read_index)].resp_pipe_path, MAX_PIPE_PATH_LENGTH);
-    strncpy(notif_pipe_path, buffer_data->buffer[*(buffer_data->read_index)].notif_pipe_path, MAX_PIPE_PATH_LENGTH);
-    printf("CLIENT POV\n");
-    printf("index: %ld\n", *(buffer_data->read_index));
-    *(buffer_data->read_index) = (*(buffer_data->read_index) + 1) % MAX_CLIENTS;
-    for(int i = 0; i < MAX_CLIENTS; i++){
-      printf("req: %s", buffer_data->buffer[i].req_pipe_path);
-      printf("resp: %s", buffer_data->buffer[i].resp_pipe_path);
-      printf("notif: %s\n", buffer_data->buffer[i].notif_pipe_path);
-    }
-    pthread_mutex_unlock(&semExMut);
-
-    sem_post(&productor_buffer);
-
-    //--------------------------------------------
-
-    //------Connecting function--------------------------
-
-    req_pipe_fd = open(req_pipe_path, O_RDONLY);
-    resp_pipe_fd = open(resp_pipe_path, O_WRONLY);
-    notif_pipe_fd = open(notif_pipe_path, O_WRONLY);  // falta testar se os opens correram bem
-
-    resp_buffer[0] = get_code_string(OP_CODE_CONNECT);
-    resp_buffer[1] = result;
-    write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer));
-
-    int index;
-    for (index = 0; index < MAX_CLIENTS; index++) {
-      if (active_clients[index].req_fd == 0) {
-        active_clients[index].req_fd = req_pipe_fd;
-        strcpy(active_clients[index].req_pipe_path, req_pipe_path);
-        active_clients[index].resp_fd = resp_pipe_fd;
-        strcpy(active_clients[index].resp_pipe_path, resp_pipe_path);
-        active_clients[index].notif_fd = notif_pipe_fd;
-        strcpy(active_clients[index].notif_pipe_path, notif_pipe_path);
-        break;
-      }
-    }
-
-    //-------------------------------------------------------------------------------------
-    // while the client is connected
+  char resp_buffer[2];            // OP_CODE + result 
+  char result = '0';
+  int disconnect_flag = 0;
 
     while (!disconnect_flag) {
       // read from the request pipe until we get a valid operation
@@ -518,11 +458,8 @@ static void *client_thread(void *arguments){
             }
 
             close(req_pipe_fd);
-            unlink(req_pipe_path);
             close(notif_pipe_fd);
-            unlink(notif_pipe_path);
             close(resp_pipe_fd);
-            unlink(resp_pipe_path);
             // go back to the main loop
             disconnect_flag = 1;
             break;
@@ -535,6 +472,77 @@ static void *client_thread(void *arguments){
         }
       }     
     }
+  return;
+}
+
+static void *client_thread(void *arguments){
+  struct ManagingClients* buffer_data = (struct ManagingClients*) arguments;
+  char req_pipe_path[MAX_PIPE_PATH_LENGTH];
+  char resp_pipe_path[MAX_PIPE_PATH_LENGTH];
+  char notif_pipe_path[MAX_PIPE_PATH_LENGTH];
+  int req_pipe_fd;
+  int resp_pipe_fd;
+  int notif_pipe_fd;
+
+  char result = '0';              // it starts at 0 because of the connect
+  char resp_buffer[2];            // OP_CODE + result 
+
+  while (1) {
+    printf("CLIENT THREAD A ESPERA\n"); //para ver se as threads voltam depois do sigurs1
+
+    // Reading from the production buffer ---------------------------
+    sem_wait(&consumer_buffer);
+
+    pthread_mutex_lock(&semExMut);
+
+    strncpy(req_pipe_path, buffer_data->buffer[*(buffer_data->read_index)].req_pipe_path, MAX_PIPE_PATH_LENGTH);
+    strncpy(resp_pipe_path, buffer_data->buffer[*(buffer_data->read_index)].resp_pipe_path, MAX_PIPE_PATH_LENGTH);
+    strncpy(notif_pipe_path, buffer_data->buffer[*(buffer_data->read_index)].notif_pipe_path, MAX_PIPE_PATH_LENGTH);
+    printf("CLIENT POV\n");
+    printf("index: %ld\n", *(buffer_data->read_index));
+    *(buffer_data->read_index) = (*(buffer_data->read_index) + 1) % MAX_CLIENTS;
+    for(int i = 0; i < MAX_CLIENTS; i++){
+      printf("req: %s", buffer_data->buffer[i].req_pipe_path);
+      printf("resp: %s", buffer_data->buffer[i].resp_pipe_path);
+      printf("notif: %s\n", buffer_data->buffer[i].notif_pipe_path);
+    }
+    pthread_mutex_unlock(&semExMut);
+
+    sem_post(&productor_buffer);
+
+    //--------------------------------------------
+
+    // Connecting the server to the client--------------------------
+
+    req_pipe_fd = open(req_pipe_path, O_RDONLY);
+    resp_pipe_fd = open(resp_pipe_path, O_WRONLY);
+    notif_pipe_fd = open(notif_pipe_path, O_WRONLY);  
+
+    resp_buffer[0] = get_code_string(OP_CODE_CONNECT);
+    resp_buffer[1] = result;
+    write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer));
+
+    int index;
+    for (index = 0; index < MAX_CLIENTS; index++) {
+      if (active_clients[index].req_fd == 0) {
+        active_clients[index].req_fd = req_pipe_fd;
+        strcpy(active_clients[index].req_pipe_path, req_pipe_path);
+        active_clients[index].resp_fd = resp_pipe_fd;
+        strcpy(active_clients[index].resp_pipe_path, resp_pipe_path);
+        active_clients[index].notif_fd = notif_pipe_fd;
+        strcpy(active_clients[index].notif_pipe_path, notif_pipe_path);
+        break;
+      }
+    }
+
+    //-------------------------------------------------------------------------------------
+
+    // Reading the clients requests and responding to them
+    run_client_requests(req_pipe_fd, resp_pipe_fd, notif_pipe_fd, index);
+
+    unlink(req_pipe_path);
+    unlink(notif_pipe_path);
+    unlink(resp_pipe_path);    
   }
   pthread_exit(NULL);
 }

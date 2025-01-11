@@ -55,14 +55,11 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   }
   // Aguardar resposta do servidor
   char resp_buffer[2];
-  int read_result;
-  read_result = read_all(filedesc[2], resp_buffer, sizeof(resp_buffer), NULL);
-  if (read_result == -1) {
-    return 1;
-  } else if (read_result == 0) {
-    terminate();
+ 
+  if(read_all(filedesc[2], resp_buffer, sizeof(resp_buffer), NULL) != 1){
     return 1;
   }
+ 
 
   printf("Server returned %c for operation: connect\n", resp_buffer[1]);
   return 0;
@@ -74,19 +71,12 @@ int kvs_disconnect(void) {
   char buffer[1];  // OP_CODE_DISCONNECT
   buffer[0] = get_code_string(OP_CODE_DISCONNECT);
   if (write_all(filedesc[1], buffer, sizeof(buffer)) == -1) {
-    // it means that a SIGUSR1 was sent to the server
-    if (errno == EPIPE) {
-      terminate();
-    }
     return 1;
   }
   //-------------------------------------------
   // Aguardar resposta do servidor
   char resp_buffer[2];
   if (read_all(filedesc[2], resp_buffer, sizeof(resp_buffer), NULL) != 1) {
-    if (errno == EPIPE) {
-      terminate();
-    }
     return 1;
   }
   for (int i = 1; i < 4; i++) {
@@ -106,18 +96,11 @@ int kvs_subscribe(const char* key) {
   strncpy(buffer + 1, key, (MAX_STRING_SIZE + 1) * sizeof(char));
 
   if (write_all(filedesc[1], buffer, sizeof(buffer)) == -1) {
-    if (errno == EPIPE) {
-      terminate();
-    }
-    // it means that a SIGUSR1 was sent to the server
     return 1;
   }
   char resp_buffer[2];
 
   if (read_all(filedesc[2], resp_buffer, sizeof(resp_buffer), NULL) != 1) {
-    if (errno == EPIPE) {
-      terminate();
-    }
     return 1;
   }
 
@@ -133,18 +116,12 @@ int kvs_unsubscribe(const char* key) {
   strncpy(buffer + 1, key, (MAX_STRING_SIZE + 1) * sizeof(char));
 
   if (write_all(filedesc[1], buffer, sizeof(buffer)) == -1) {
-    if (errno == EPIPE) {
-      terminate();
-    }
     return 1;
   }
   // response of type: "%c %c\n" -> OP_CODE_UNSUBSCRIBE, result
   char resp_buffer[2];
 
   if (read_all(filedesc[2], resp_buffer, sizeof(resp_buffer), NULL) != 1) {
-    if (errno == EPIPE) {
-      terminate();
-    }
     return 1;
   }
 
@@ -160,14 +137,12 @@ void* kvs_get_notification(void* arg) {
   char value[MAX_STRING_SIZE + 1];
 
   // we only want to read from the pipe while the client is connected
-  // if the client disconnects(filedas[3] closes), the *connected condition prevents any more read_all calls
+  // if the client disconnects(filedas[3] closes),
+  // the *connected condition prevents MOST read_all calls without a file descriptor 
   // if the server terminates, the read_all will return 0 and the client will terminate
   while (*connected) {
     if (read_all(filedesc[3], buffer, sizeof(buffer), NULL) != 1) {
-      if (errno == EPIPE) {
-        break;
-      }
-      continue;
+      break;
     }
     strncpy(key, buffer, MAX_STRING_SIZE + 1);
     strncpy(value, buffer + MAX_STRING_SIZE + 1, MAX_STRING_SIZE + 1);
