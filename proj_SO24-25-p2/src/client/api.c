@@ -148,6 +148,7 @@ void* kvs_get_notification(void* arg) {
     strncpy(value, buffer + MAX_STRING_SIZE + 1, MAX_STRING_SIZE + 1);
     printf("(%s,%s)\n", key, value);
   }
+  terminate();
   return NULL;
 }
 

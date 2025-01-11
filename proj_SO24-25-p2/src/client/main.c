@@ -104,7 +104,6 @@ int main(int argc, char* argv[]) {
         break;
     }
   }
-  terminate();
   pthread_join(notif_thread, NULL);
   return 0;
 }
