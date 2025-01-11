@@ -92,7 +92,6 @@ static void sigusr1_handler(int signo) {
     exit(EXIT_FAILURE);
   }
   if (signo == SIGUSR1) {
-    printf("Received SIGUSR1\n\n\n\n\n");
     signal_received = 1;
   }
   return;
@@ -228,7 +227,6 @@ static int run_job(int in_fd, int out_fd, char* filename) {
         break;
 
       case EOC:
-        printf("EOF\n");
         return 0;
     }
   }
@@ -236,8 +234,6 @@ static int run_job(int in_fd, int out_fd, char* filename) {
 
 // frees arguments
 static void* get_file(void* arguments) {
-
-
   struct SharedData* thread_data = (struct SharedData*)arguments;
   DIR* dir = thread_data->dir;
   char* dir_name = thread_data->dir_name;
@@ -304,7 +300,6 @@ static void* get_file(void* arguments) {
 }
 
 void assing_pipe_data(struct PipeData* buffer, size_t index, char* pipes_path) {
-
   strncpy(buffer[index].req_pipe_path, pipes_path, MAX_PIPE_PATH_LENGTH);
   strncpy(buffer[index].resp_pipe_path, pipes_path + MAX_PIPE_PATH_LENGTH, MAX_PIPE_PATH_LENGTH);
   strncpy(buffer[index].notif_pipe_path, pipes_path + (2 * MAX_PIPE_PATH_LENGTH), MAX_PIPE_PATH_LENGTH);
@@ -315,7 +310,7 @@ static void* managing_clients(void* arguments) {
   struct ManagingClients* buffer_data = (struct ManagingClients*)arguments;
   char buffer[1 + MAX_PIPE_PATH_LENGTH * 3];  // OP_CODE + 3 pipe paths
   size_t write_index = 0;
-  
+
   struct sigaction sigaction_struct;
   memset(&sigaction_struct, 0, sizeof(sigaction_struct));
 
@@ -323,53 +318,40 @@ static void* managing_clients(void* arguments) {
   sigemptyset(&sigaction_struct.sa_mask);
   sigaction_struct.sa_flags = SA_RESTART;
 
-
-  //Handle SIGUSR1
-  if(pthread_sigmask(SIG_UNBLOCK, &set_with_sigusr1, NULL) != 0){
+  // Handle SIGUSR1
+  if (pthread_sigmask(SIG_UNBLOCK, &set_with_sigusr1, NULL) != 0) {
     perror("pthread_sigmask");
     return NULL;
   }
-  //Sigaction to handle SIGUSR1 multiple times
+  // Sigaction to handle SIGUSR1 multiple times
   if (sigaction(SIGUSR1, &sigaction_struct, NULL) != 0) {
     perror("signal");
     return NULL;
   }
 
-  printf("program id: %d\n", getpid());
-
   // Is allways reading from the FIFO waiting for a client to connect
   while (1) {
     if (signal_received == 1) {
-      printf("Received SIGUSR1 2\n\n\n");
       close_all_clients();
       // disconnect all is not async signal safe, so we need to call it here
       disconnect_all();
       signal_received = 0;
     }
-    if (read_all(buffer_data->fifo_fd, buffer, sizeof(buffer), NULL) == 1){
+    if (read_all(buffer_data->fifo_fd, buffer, sizeof(buffer), NULL) == 1) {
       if (get_code(buffer[0]) == OP_CODE_CONNECT) {
         sem_wait(&productor_buffer);
 
         pthread_mutex_lock(&semExMut);
 
         assing_pipe_data(buffer_data->buffer, write_index, buffer + 1);
-        printf("MANAGER POV\n");
-        printf("index: %ld\n", write_index);
-        for (int i = 0; i < MAX_CLIENTS; i++){
-          printf("req: %s", buffer_data->buffer[i].req_pipe_path);
-          printf("resp: %s", buffer_data->buffer[i].resp_pipe_path);
-          printf("notif: %s\n", buffer_data->buffer[i].notif_pipe_path);
-        }
-        write_index = (write_index + 1) % MAX_CLIENTS;
 
+        write_index = (write_index + 1) % MAX_CLIENTS;
 
         pthread_mutex_unlock(&semExMut);
 
         sem_post(&consumer_buffer);
       }
     }
-
-    
   }
   close(buffer_data->fifo_fd);
   pthread_exit(NULL);
@@ -378,105 +360,105 @@ static void* managing_clients(void* arguments) {
 void run_client_requests(int req_pipe_fd, int resp_pipe_fd, int notif_pipe_fd, int index) {
   char op_buffer[1];              // OP_CODE + space
   char key[MAX_STRING_SIZE + 1];  // key + \0
-  char resp_buffer[2];            // OP_CODE + result 
+  char resp_buffer[2];            // OP_CODE + result
   char result = '0';
   int disconnect_flag = 0;
 
-    while (!disconnect_flag) {
-      // read from the request pipe until we get a valid operation
-      
-      if(read_all(req_pipe_fd, op_buffer, sizeof(op_buffer), NULL) != 1) {
-        if (errno == EBADF) {
+  while (!disconnect_flag) {
+    // read from the request pipe until we get a valid operation
+
+    if (read_all(req_pipe_fd, op_buffer, sizeof(op_buffer), NULL) != 1) {
+      if (errno == EBADF) {
+        disconnect_flag = 1;
+        break;
+      }
+    } else {
+      enum Code op_code = get_code(op_buffer[0]);
+      switch (op_code) {
+        case OP_CODE_SUBSCRIBE:
+          // if read_all fails beacuse of no file descriptor it needs to break the loop
+          if (read_all(req_pipe_fd, key, sizeof(key), NULL) == -1) {
+            if (errno == EBADF) {
+              disconnect_flag = 1;
+              break;
+            }
+            pthread_exit(NULL);
+          }
+
+          result = subscribe(key, notif_pipe_fd);
+          resp_buffer[0] = get_code_string(OP_CODE_SUBSCRIBE);
+          resp_buffer[1] = result;
+          // fazer condição para quando o errno nao é EBADF
+          if (write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer)) == -1) {
+            if (errno == EBADF) {
+              disconnect_flag = 1;
+              break;
+            }
+            pthread_exit(NULL);
+          }
+
+          break;
+
+        case OP_CODE_UNSUBSCRIBE:
+          if (read_all(req_pipe_fd, key, sizeof(key), NULL) == -1) {
+            if (errno == EBADF) {
+              disconnect_flag = 1;
+              break;
+            }
+            pthread_exit(NULL);
+          }
+          result = unsubscribe(key, notif_pipe_fd);
+          resp_buffer[0] = get_code_string(OP_CODE_UNSUBSCRIBE);
+          resp_buffer[1] = result;
+          if (write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer)) == -1) {
+            if (errno == EBADF) {
+              disconnect_flag = 1;
+              break;
+            }
+            pthread_exit(NULL);
+          }
+
+          break;
+
+        case OP_CODE_DISCONNECT:
+
+          result = disconnect(notif_pipe_fd);
+
+          active_clients[index].req_fd = 0;
+          active_clients[index].resp_fd = 0;
+          active_clients[index].notif_fd = 0;
+
+          resp_buffer[0] = get_code_string(OP_CODE_DISCONNECT);
+          resp_buffer[1] = result;
+
+          if (write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer)) == -1) {
+            if (errno == EBADF) {
+              disconnect_flag = 1;
+              break;
+            }
+            pthread_exit(NULL);
+          }
+
+          close(req_pipe_fd);
+          close(notif_pipe_fd);
+          close(resp_pipe_fd);
+          // go back to the main loop
           disconnect_flag = 1;
           break;
-        }
-      }else{
-        enum Code op_code = get_code(op_buffer[0]);
-        switch (op_code) {
-          case OP_CODE_SUBSCRIBE:
-            // if read_all fails beacuse of no file descriptor it needs to break the loop
-            if (read_all(req_pipe_fd, key, sizeof(key), NULL) == -1) {
-              if (errno == EBADF) {
-                disconnect_flag = 1;
-                break;
-              }
-              pthread_exit(NULL);
-            }
-
-            result = subscribe(key, notif_pipe_fd);
-            resp_buffer[0] = get_code_string(OP_CODE_SUBSCRIBE);
-            resp_buffer[1] = result;
-            // fazer condição para quando o errno nao é EBADF
-            if (write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer)) == -1) {
-              if (errno == EBADF) {
-                disconnect_flag = 1;
-                break;
-              }
-              pthread_exit(NULL);
-            }
-
-            break;
-
-          case OP_CODE_UNSUBSCRIBE:
-            if (read_all(req_pipe_fd, key, sizeof(key), NULL) == -1) {
-              if (errno == EBADF) {
-                disconnect_flag = 1;
-                break;
-              }
-              pthread_exit(NULL);
-            }
-            result = unsubscribe(key, notif_pipe_fd);
-            resp_buffer[0] = get_code_string(OP_CODE_UNSUBSCRIBE);
-            resp_buffer[1] = result;
-            if (write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer)) == -1) {
-              if (errno == EBADF) {
-                disconnect_flag = 1;
-                break;
-              }
-              pthread_exit(NULL);
-            }
-
-            break;
-
-          case OP_CODE_DISCONNECT:
-
-            result = disconnect(notif_pipe_fd);
-
-            active_clients[index].req_fd = 0;
-            active_clients[index].resp_fd = 0;
-            active_clients[index].notif_fd = 0;
-
-            resp_buffer[0] = get_code_string(OP_CODE_DISCONNECT);
-            resp_buffer[1] = result;
-
-            if (write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer)) == -1) {
-              if (errno == EBADF) {
-                disconnect_flag = 1;
-                break;
-              }
-              pthread_exit(NULL);
-            }
-
-            close(req_pipe_fd);
-            close(notif_pipe_fd);
-            close(resp_pipe_fd);
-            // go back to the main loop
-            disconnect_flag = 1;
-            break;
-          case OP_CODE_INVALID:
-            fprintf(stderr, "Invalid operation\n");
-            break;
-          case OP_CODE_CONNECT:
-            fprintf(stderr, "Invalid operation\n");
-            break;
-        }
-      }     
+        case OP_CODE_INVALID:
+          fprintf(stderr, "Invalid operation\n");
+          break;
+        case OP_CODE_CONNECT:
+          fprintf(stderr, "Invalid operation\n");
+          break;
+      }
     }
+  }
   return;
 }
 
-static void *client_thread(void *arguments){
-  struct ManagingClients* buffer_data = (struct ManagingClients*) arguments;
+static void* client_thread(void* arguments) {
+  struct ManagingClients* buffer_data = (struct ManagingClients*)arguments;
   char req_pipe_path[MAX_PIPE_PATH_LENGTH];
   char resp_pipe_path[MAX_PIPE_PATH_LENGTH];
   char notif_pipe_path[MAX_PIPE_PATH_LENGTH];
@@ -484,11 +466,10 @@ static void *client_thread(void *arguments){
   int resp_pipe_fd;
   int notif_pipe_fd;
 
-  char result = '0';              // it starts at 0 because of the connect
-  char resp_buffer[2];            // OP_CODE + result 
+  char result = '0';    // it starts at 0 because of the connect
+  char resp_buffer[2];  // OP_CODE + result
 
   while (1) {
-    printf("CLIENT THREAD A ESPERA\n"); //para ver se as threads voltam depois do sigurs1
 
     // Reading from the production buffer ---------------------------
     sem_wait(&consumer_buffer);
@@ -498,14 +479,8 @@ static void *client_thread(void *arguments){
     strncpy(req_pipe_path, buffer_data->buffer[*(buffer_data->read_index)].req_pipe_path, MAX_PIPE_PATH_LENGTH);
     strncpy(resp_pipe_path, buffer_data->buffer[*(buffer_data->read_index)].resp_pipe_path, MAX_PIPE_PATH_LENGTH);
     strncpy(notif_pipe_path, buffer_data->buffer[*(buffer_data->read_index)].notif_pipe_path, MAX_PIPE_PATH_LENGTH);
-    printf("CLIENT POV\n");
-    printf("index: %ld\n", *(buffer_data->read_index));
+
     *(buffer_data->read_index) = (*(buffer_data->read_index) + 1) % MAX_CLIENTS;
-    for(int i = 0; i < MAX_CLIENTS; i++){
-      printf("req: %s", buffer_data->buffer[i].req_pipe_path);
-      printf("resp: %s", buffer_data->buffer[i].resp_pipe_path);
-      printf("notif: %s\n", buffer_data->buffer[i].notif_pipe_path);
-    }
     pthread_mutex_unlock(&semExMut);
 
     sem_post(&productor_buffer);
@@ -516,7 +491,7 @@ static void *client_thread(void *arguments){
 
     req_pipe_fd = open(req_pipe_path, O_RDONLY);
     resp_pipe_fd = open(resp_pipe_path, O_WRONLY);
-    notif_pipe_fd = open(notif_pipe_path, O_WRONLY);  
+    notif_pipe_fd = open(notif_pipe_path, O_WRONLY);
 
     resp_buffer[0] = get_code_string(OP_CODE_CONNECT);
     resp_buffer[1] = result;
@@ -542,7 +517,7 @@ static void *client_thread(void *arguments){
 
     unlink(req_pipe_path);
     unlink(notif_pipe_path);
-    unlink(resp_pipe_path);    
+    unlink(resp_pipe_path);
   }
   pthread_exit(NULL);
 }
@@ -676,7 +651,7 @@ int main(int argc, char** argv) {
   char* endptr;
   max_backups = strtoul(argv[3], &endptr, 10);
 
-  //initialize the global sigset
+  // initialize the global sigset
   initialize_global_sigset();
 
   if (pthread_sigmask(SIG_BLOCK, &set_with_sigusr1, NULL) != 0) {
@@ -714,7 +689,7 @@ int main(int argc, char** argv) {
   sem_init(&productor_buffer, 0, MAX_CLIENTS);
   sem_init(&consumer_buffer, 0, 0);
 
-  //initialize the global sigset
+  // initialize the global sigset
   initialize_global_sigset();
 
   if (kvs_init()) {

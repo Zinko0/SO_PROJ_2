@@ -55,11 +55,10 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   }
   // Aguardar resposta do servidor
   char resp_buffer[2];
- 
-  if(read_all(filedesc[2], resp_buffer, sizeof(resp_buffer), NULL) != 1){
+
+  if (read_all(filedesc[2], resp_buffer, sizeof(resp_buffer), NULL) != 1) {
     return 1;
   }
- 
 
   printf("Server returned %c for operation: connect\n", resp_buffer[1]);
   return 0;
@@ -138,7 +137,7 @@ void* kvs_get_notification(void* arg) {
 
   // we only want to read from the pipe while the client is connected
   // if the client disconnects(filedas[3] closes),
-  // the *connected condition prevents MOST read_all calls without a file descriptor 
+  // the *connected condition prevents MOST read_all calls without a file descriptor
   // if the server terminates, the read_all will return 0 and the client will terminate
   while (*connected) {
     if (read_all(filedesc[3], buffer, sizeof(buffer), NULL) != 1) {
