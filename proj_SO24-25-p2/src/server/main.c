@@ -490,9 +490,15 @@ static void* client_thread(void* arguments) {
 
     // Connecting the server to the client--------------------------
 
-    req_pipe_fd = open(req_pipe_path, O_RDONLY);
-    resp_pipe_fd = open(resp_pipe_path, O_WRONLY);
-    notif_pipe_fd = open(notif_pipe_path, O_WRONLY);
+    if((req_pipe_fd = open(req_pipe_path, O_RDONLY)) == -1){
+      perror("request pipe open error");
+    }
+    if((resp_pipe_fd = open(resp_pipe_path, O_WRONLY)) == -1){
+      perror("response pipe open error");
+    }
+    if((notif_pipe_fd = open(notif_pipe_path, O_WRONLY)) == -1){
+      perror("notification pipe open error");
+    }
 
     resp_buffer[0] = get_code_string(OP_CODE_CONNECT);
     resp_buffer[1] = result;

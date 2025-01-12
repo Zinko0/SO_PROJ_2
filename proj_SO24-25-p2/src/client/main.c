@@ -43,9 +43,7 @@ int main(int argc, char* argv[]) {
         if (kvs_disconnect() != 0) {
           fprintf(stderr, "Disconnect from server due to SIGUSR1\n");
         }
-        else {
-          printf("Disconnected from server\n");
-        }
+
         connected = 0;
         pthread_join(notif_thread, NULL);
         printf("Disconnected from server\n");

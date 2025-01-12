@@ -27,9 +27,7 @@ struct HashTable *create_hash_table() {
   if (!ht) return NULL;
   for (int i = 0; i < TABLE_SIZE; i++) {
     ht->table[i] = NULL;
-    if (pthread_rwlock_init(&ht->tablelock[i], NULL) != 0) {
-      return NULL;
-    }
+    pthread_rwlock_init(&ht->tablelock, NULL);
   }
   return ht;
 }
@@ -189,8 +187,6 @@ void free_table(HashTable *ht) {
       free(temp);
     }
   }
-  for (int i = 0; i < TABLE_SIZE; i++) {
-    pthread_rwlock_destroy(&ht->tablelock[i]);
-  }
+  pthread_rwlock_destroy(&ht->tablelock);
   free(ht);
 }

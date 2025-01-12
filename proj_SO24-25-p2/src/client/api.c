@@ -14,6 +14,17 @@ int filedesc[4];
 
 int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char const* server_pipe_path,
                 char const* notif_pipe_path) {
+  // create pipes
+  if (create_pipe(req_pipe_path) == -1) {
+    return 1;
+  }
+  if (create_pipe(resp_pipe_path) == -1) {
+    return 1;
+  }
+
+  if (create_pipe(notif_pipe_path) == -1) {
+    return 1;
+  }
   // abro o pipe (o server já deve estar aberto)
   filedesc[0] = open(server_pipe_path, O_WRONLY);
   //------------------------------------------
@@ -37,16 +48,7 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
   close(filedesc[0]);
   //------------------------------------------
 
-  if (create_pipe(req_pipe_path) == -1) {
-    return 1;
-  }
-  if (create_pipe(resp_pipe_path) == -1) {
-    return 1;
-  }
 
-  if (create_pipe(notif_pipe_path) == -1) {
-    return 1;
-  }
   filedesc[1] = open(req_pipe_path, O_WRONLY);
   filedesc[2] = open(resp_pipe_path, O_RDONLY);
   filedesc[3] = open(notif_pipe_path, O_RDONLY);
