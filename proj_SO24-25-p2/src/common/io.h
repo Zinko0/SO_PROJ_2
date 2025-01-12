@@ -24,10 +24,19 @@ int write_all(int fd, const void *buffer, size_t size);
 
 void delay(unsigned int time_ms);
 
+/// Deletes the pipe on the path given if existing and creates pipe on the path given
+/// @param pipe_path Path where pipe needs to be created
+/// @return On success, returns 0, on error, returns -1
 int create_pipe(char const *pipe_path);
 
+/// @brief Convert char to corresponding OPCODE
+/// @param c Char to convert to OPCODE
+/// @return OPCODE of the given char
 enum Code get_code(char c);
 
+/// @brief Convert OPCODE to corresponding char
+/// @param  code OPCODE to convert to char
+/// @return char of the given OPCODE
 char get_code_string(enum Code code);
 
 #endif  // COMMON_IO_H

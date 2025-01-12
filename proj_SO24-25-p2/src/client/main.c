@@ -41,12 +41,11 @@ int main(int argc, char* argv[]) {
     switch (get_next(STDIN_FILENO)) {
       case CMD_DISCONNECT:
         if (kvs_disconnect() != 0) {
-          fprintf(stderr, "Failed to disconnect to the server\n");
-          connected = 0;
-          pthread_join(notif_thread, NULL);
-          return 1;
+          fprintf(stderr, "Disconnect from server due to SIGUSR1\n");
         }
-
+        else {
+          printf("Disconnected from server\n");
+        }
         connected = 0;
         pthread_join(notif_thread, NULL);
         printf("Disconnected from server\n");
@@ -60,7 +59,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (kvs_subscribe(keys[0])) {
-          fprintf(stderr, "Command subscribe failed\n");
+          fprintf(stderr, "Disconnect from server due to SIGUSR1\n");
           connected = 0;
         }
 
@@ -74,7 +73,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (kvs_unsubscribe(keys[0])) {
-          fprintf(stderr, "Command subscribe failed\n");
+          fprintf(stderr, "Disconnect from server due to SIGUSR1\n");
           connected = 0;
         }
 

@@ -311,14 +311,15 @@ static void* managing_clients(void* arguments) {
   char buffer[1 + MAX_PIPE_PATH_LENGTH * 3];  // OP_CODE + 3 pipe paths
   size_t write_index = 0;
 
+  // Creation of sigaction struct to repeatedly handle sigusr1
   struct sigaction sigaction_struct;
   memset(&sigaction_struct, 0, sizeof(sigaction_struct));
 
   sigaction_struct.sa_handler = sigusr1_handler;
   sigemptyset(&sigaction_struct.sa_mask);
-  sigaction_struct.sa_flags = SA_RESTART;
+  sigaction_struct.sa_flags = SA_RESTART; //SA_RESTART to handle multiple times
 
-  // Handle SIGUSR1
+  // Unblock SIGUSR1, because it is blocked by default from main
   if (pthread_sigmask(SIG_UNBLOCK, &set_with_sigusr1, NULL) != 0) {
     perror("pthread_sigmask");
     return NULL;
@@ -515,6 +516,7 @@ static void* client_thread(void* arguments) {
     // Reading the clients requests and responding to them
     run_client_requests(req_pipe_fd, resp_pipe_fd, notif_pipe_fd, index);
 
+    // Deleting pipes when no longer necessary
     unlink(req_pipe_path);
     unlink(notif_pipe_path);
     unlink(resp_pipe_path);
@@ -535,6 +537,7 @@ static void dispatch_threads(DIR* dir, struct ManagingClients* buffer_data) {
 
   struct SharedData thread_data = {dir, jobs_directory, PTHREAD_MUTEX_INITIALIZER};
 
+  //dispatching the threads that process job files
   for (size_t i = 0; i < max_threads; i++) {
     if (pthread_create(&threads[i], NULL, get_file, (void*)&thread_data) != 0) {
       fprintf(stderr, "Failed to create thread %zu\n", i);
@@ -545,7 +548,7 @@ static void dispatch_threads(DIR* dir, struct ManagingClients* buffer_data) {
       return;
     }
   }
-  // dispatching the host thread TODO IT IS NOT CORRECT
+  // dispatching the host thread
   if (pthread_create(host_thread, NULL, managing_clients, (void*)buffer_data) != 0) {
     fprintf(stderr, "Failed to create host thread\n");
     pthread_mutex_destroy(&thread_data.directory_mutex);
@@ -555,6 +558,7 @@ static void dispatch_threads(DIR* dir, struct ManagingClients* buffer_data) {
     return;
   }
 
+  //dispatching the threads that handles clients (one thread per client)
   for (size_t i = 0; i < MAX_CLIENTS; i++) {
     if (pthread_create(&client_threads[i], NULL, client_thread, (void*)buffer_data) != 0) {
       fprintf(stderr, "Failed to create client thread\n");

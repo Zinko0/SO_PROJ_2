@@ -20,8 +20,10 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
 
   char buffer[1 + MAX_PIPE_PATH_LENGTH * 3];
 
+  // Fill buffer with \0
   memset(buffer, 0, sizeof(buffer));
 
+  // Assemble buffer to write to server
   buffer[0] = get_code_string(OP_CODE_CONNECT);
   strncpy(buffer + 1, req_pipe_path, (strlen(req_pipe_path)) * sizeof(char));
   strncpy(buffer + 1 + MAX_PIPE_PATH_LENGTH, resp_pipe_path, (strlen(resp_pipe_path)) * sizeof(char));
@@ -78,11 +80,6 @@ int kvs_disconnect(void) {
   if (read_all(filedesc[2], resp_buffer, sizeof(resp_buffer), NULL) != 1) {
     return 1;
   }
-  for (int i = 1; i < 4; i++) {
-    if (close(filedesc[i]) == -1) {
-      return 1;
-    }
-  }
   printf("Server returned %c for operation: disconnect\n", resp_buffer[1]);
   return 0;
 }
@@ -90,7 +87,10 @@ int kvs_disconnect(void) {
 int kvs_subscribe(const char* key) {
   // send subscribe message to request pipe and wait for response in response pipe
   char buffer[1 + MAX_STRING_SIZE + 1];
+
+  // Fill buffer with \0
   memset(buffer, 0, sizeof(buffer));
+
   buffer[0] = get_code_string(OP_CODE_SUBSCRIBE);
   strncpy(buffer + 1, key, (MAX_STRING_SIZE + 1) * sizeof(char));
 
@@ -110,7 +110,10 @@ int kvs_subscribe(const char* key) {
 int kvs_unsubscribe(const char* key) {
   // send unsubscribe message to request pipe and wait for response in response pipe
   char buffer[1 + MAX_STRING_SIZE + 1];
+
+  // Fill buffer with \0
   memset(buffer, 0, sizeof(buffer));
+  
   buffer[0] = get_code_string(OP_CODE_SUBSCRIBE);
   strncpy(buffer + 1, key, (MAX_STRING_SIZE + 1) * sizeof(char));
 
@@ -136,7 +139,7 @@ void* kvs_get_notification(void* arg) {
   char value[MAX_STRING_SIZE + 1];
 
   // we only want to read from the pipe while the client is connected
-  // if the client disconnects(filedas[3] closes),
+  // if the client disconnects(filedesc[3] closes),
   // the *connected condition prevents MOST read_all calls without a file descriptor
   // if the server terminates, the read_all will return 0 and the client will terminate
   while (*connected) {
@@ -151,9 +154,11 @@ void* kvs_get_notification(void* arg) {
   return NULL;
 }
 
-void terminate() {
+int terminate() {
   for (size_t i = 1; i < 4; i++) {
-    close(filedesc[i]);
+    if (close(filedesc[i]) !=  0){
+      return 1;
+    }
   }
-  return;
+  return 0;
 }

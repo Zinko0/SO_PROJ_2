@@ -76,6 +76,8 @@ char unsubscribe(char* key, int fd);
 /// @return 0 if the client was disconnected successfully, 1 otherwise.
 char disconnect(int fd);
 
+/// @brief Disconnects all clients from server, more efficient than using disconnect(fd) for all clients
+/// @return 0 if all the clients were disconnected successfully, 1 otherwise 
 int disconnect_all();
 
 #endif  // KVS_OPERATIONS_H

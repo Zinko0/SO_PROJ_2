@@ -121,7 +121,7 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
   individual_hash_keys = set_of_keys(hash_keys, num_pairs, &individual_keys_length);
 
   if (read_lock_table(individual_keys_length, individual_hash_keys, kvs_table->tablelock) != 0) {
-    fprintf(stderr, "Failed to writelock hashtable\n");
+    fprintf(stderr, "Failed to readlock hashtable\n");
     return 1;
   };
 

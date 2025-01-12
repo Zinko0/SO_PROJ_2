@@ -48,18 +48,18 @@ int delete_pair(HashTable *ht, const char *key);
 /// @param ht Hash table to be deleted.
 void free_table(HashTable *ht);
 
-/// @brief
-/// @param ht
-/// @param key
-/// @param fd
+/// @brief Add a subscriber to a certain key
+/// @param ht Hashtable
+/// @param key Key
+/// @param fd File descriptor of the client's notification pipe
 /// @return 0 if the key was not found, 1 if the subscription was added successfully, -1 if there is no space for more
 /// subscribers
 int write_subscription(HashTable *ht, const char *key, int fd);
 
-/// @brief
-/// @param ht
-/// @param key
-/// @param fd
+/// @brief Remove a subscriber from a certain key
+/// @param ht Hashtable
+/// @param key Key
+/// @param fd File descriptor of the client's notification pipe
 /// @return 1 if the key was not found, 0 if the subscription was deleted successfully
 int delete_subscription(HashTable *ht, const char *key, int fd);
 

@@ -84,7 +84,7 @@ void delay(unsigned int time_ms) {
 }
 
 int create_pipe(char const *pipe_path) {
-  // unlink pipe
+  // unlink pipe if pipe already existed
   if (unlink(pipe_path) != 0 && errno != ENOENT) {
     return -1;
   }
