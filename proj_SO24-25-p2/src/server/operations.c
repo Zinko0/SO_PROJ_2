@@ -21,27 +21,6 @@ static struct timespec delay_to_timespec(unsigned int delay_ms) {
   return (struct timespec){delay_ms / 1000, (delay_ms % 1000) * 1000000};
 }
 
-int hash_key_sort(const void *a, const void *b) { return *(int *)a - *(int *)b; }
-
-int *set_of_keys(int *hash_keys, size_t num_pairs, size_t *individual_keys_length) {
-  int *individual_hash_keys = malloc(sizeof(int) * num_pairs);
-  if (individual_hash_keys == NULL) {
-    fprintf(stderr, "Failed to allocate memory\n");
-    return NULL;
-  }
-  size_t individual_key_indexes = 1;
-  individual_hash_keys[0] = hash_keys[0];
-
-  for (size_t i = 1; i < num_pairs; i++) {
-    if (hash_keys[i] != hash_keys[i - 1]) {
-      individual_hash_keys[individual_key_indexes] = hash_keys[i];
-      individual_key_indexes++;
-    }
-  }
-
-  *individual_keys_length = individual_key_indexes;
-  return individual_hash_keys;
-}
 
 int kvs_init() {
   if (kvs_table != NULL) {

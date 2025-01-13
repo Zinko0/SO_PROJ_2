@@ -492,12 +492,18 @@ static void* client_thread(void* arguments) {
 
     if((req_pipe_fd = open(req_pipe_path, O_RDONLY)) == -1){
       perror("request pipe open error");
+      continue;
     }
     if((resp_pipe_fd = open(resp_pipe_path, O_WRONLY)) == -1){
+      close(req_pipe_fd);
       perror("response pipe open error");
+      continue;
     }
     if((notif_pipe_fd = open(notif_pipe_path, O_WRONLY)) == -1){
+      close(req_pipe_fd);
+      close(resp_pipe_fd);
       perror("notification pipe open error");
+      continue;
     }
 
     resp_buffer[0] = get_code_string(OP_CODE_CONNECT);
@@ -634,7 +640,7 @@ int requests_buffer_init(struct ManagingClients* buffer, char* fifo_name) {
   }
 
   buffer->fifo_fd = fifo_fd;
-  buffer->read_index = malloc(sizeof(size_t));  // MALOC TEMOS DE DAR FREE
+  buffer->read_index = malloc(sizeof(size_t));  
   *(buffer->read_index) = 0;
 
   for (int i = 0; i < MAX_CLIENTS; i++) {
@@ -712,7 +718,7 @@ int main(int argc, char** argv) {
     fprintf(stderr, "Failed to open directory: %s\n", argv[1]);
     return 0;
   }
-  // WARNING: NAO SEI SE PRECISO DE PASSAR MAIS DO QUE O NOME DO FIFO
+
   dispatch_threads(dir, &buffer_data);
 
   if (closedir(dir) == -1) {
@@ -726,6 +732,6 @@ int main(int argc, char** argv) {
   }
 
   kvs_terminate();
-
+  free(buffer_data.read_index);
   return 0;
 }
