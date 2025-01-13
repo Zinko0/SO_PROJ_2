@@ -64,7 +64,7 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char cons
     return 1;
   }
 
-  printf("Server returned %c for operation: connect\n", resp_buffer[1]);
+  printf("Server returned %c%c for operation: connect\n", resp_buffer[0],resp_buffer[1]);
   return 0;
 }
 
@@ -82,7 +82,8 @@ int kvs_disconnect(void) {
   if (read_all(filedesc[2], resp_buffer, sizeof(resp_buffer), NULL) != 1) {
     return 1;
   }
-  printf("Server returned %c for operation: disconnect\n", resp_buffer[1]);
+  
+  printf("Server returned %c%c for operation: disconnect\n", resp_buffer[0], resp_buffer[1]);
   return 0;
 }
 
@@ -105,7 +106,7 @@ int kvs_subscribe(const char* key) {
     return 1;
   }
 
-  printf("Server returned %c for operation: subscribe\n", resp_buffer[1]);
+  printf("Server returned %c%c for operation: subscribe\n", resp_buffer[0], resp_buffer[1]);
   return 0;
 }
 
@@ -129,7 +130,7 @@ int kvs_unsubscribe(const char* key) {
     return 1;
   }
 
-  printf("Server returned %c for operation: unsubscribe\n", resp_buffer[1]);
+  printf("Server returned %c%c for operation: unsubscribe\n", resp_buffer[0], resp_buffer[1]);
   return 0;
 }
 

@@ -364,6 +364,8 @@ void run_client_requests(int req_pipe_fd, int resp_pipe_fd, int notif_pipe_fd, i
   char resp_buffer[2];            // OP_CODE + result
   char result = '0';
   int disconnect_flag = 0;
+  
+  
 
   while (!disconnect_flag) {
     // read from the request pipe until we get a valid operation
@@ -383,19 +385,16 @@ void run_client_requests(int req_pipe_fd, int resp_pipe_fd, int notif_pipe_fd, i
               disconnect_flag = 1;
               break;
             }
-            pthread_exit(NULL);
           }
 
           result = subscribe(key, notif_pipe_fd);
           resp_buffer[0] = get_code_string(OP_CODE_SUBSCRIBE);
           resp_buffer[1] = result;
-          // fazer condição para quando o errno nao é EBADF
           if (write_all(resp_pipe_fd, resp_buffer, sizeof(resp_buffer)) == -1) {
             if (errno == EBADF) {
               disconnect_flag = 1;
               break;
             }
-            pthread_exit(NULL);
           }
 
           break;
@@ -416,7 +415,6 @@ void run_client_requests(int req_pipe_fd, int resp_pipe_fd, int notif_pipe_fd, i
               disconnect_flag = 1;
               break;
             }
-            pthread_exit(NULL);
           }
 
           break;
@@ -437,7 +435,6 @@ void run_client_requests(int req_pipe_fd, int resp_pipe_fd, int notif_pipe_fd, i
               disconnect_flag = 1;
               break;
             }
-            pthread_exit(NULL);
           }
 
           close(req_pipe_fd);
