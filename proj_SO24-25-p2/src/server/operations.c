@@ -187,11 +187,11 @@ char subscribe(char *key, int fd) {
 
   if (write_subscription(kvs_table, key, fd) != 0) {
     pthread_rwlock_unlock(&kvs_table->tablelock);
-    return '0';
+    return '1';
   }
 
   pthread_rwlock_unlock(&kvs_table->tablelock);
-  return '1';
+  return '0';
 }
 
 char unsubscribe(char *key, int fd) {

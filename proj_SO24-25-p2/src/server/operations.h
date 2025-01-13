@@ -63,7 +63,7 @@ int get_n_current_backups();
 
 /// Subscribes a client to a key.
 /// @param key key that the client wants to subscribe.
-/// @return 1 if the client was subscribed successfully, 0 otherwise.
+/// @return 0 if the client was subscribed successfully, 1 otherwise.
 char subscribe(char* key, int fd);
 
 /// Unsubscribes a client from a key.
