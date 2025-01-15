@@ -180,18 +180,18 @@ void kvs_wait(unsigned int delay_ms) {
 char subscribe(char *key, int fd) {
   if (kvs_table == NULL) {
     fprintf(stderr, "KVS state must be initialized\n");
-    return '1';
+    return '0';
   }
 
   pthread_rwlock_wrlock(&kvs_table->tablelock);
 
   if (write_subscription(kvs_table, key, fd) != 0) {
     pthread_rwlock_unlock(&kvs_table->tablelock);
-    return '1';
+    return '0';
   }
 
   pthread_rwlock_unlock(&kvs_table->tablelock);
-  return '0';
+  return '1';
 }
 
 char unsubscribe(char *key, int fd) {
